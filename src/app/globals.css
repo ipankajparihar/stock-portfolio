@@ -1,26 +1,196 @@
 @import "tailwindcss";
 
+/**
+ * Design tokens.
+ *
+ * Semantic naming (`--color-gain`, not `--color-green`) because these carry meaning:
+ * gain/loss colour is the fastest signal in the whole table and must stay consistent
+ * across cells, pills, charts and summary cards.
+ *
+ * Both themes are defined here, and the palette is chosen so gain/loss stay legible on
+ * either background — the emerald/rose pair holds contrast in light and dark, which a
+ * naive pure green/red pair does not.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --background: #f7f8fa;
+  --surface: #ffffff;
+  --surface-muted: #f1f3f6;
+  --border: #e3e6ec;
+  --border-strong: #cdd3dd;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --foreground: #0f172a;
+  --muted: #64748b;
+  --muted-strong: #475569;
+
+  --gain: #047857;
+  --gain-soft: #ecfdf5;
+  --gain-border: #a7f3d0;
+
+  --loss: #be123c;
+  --loss-soft: #fff1f2;
+  --loss-border: #fecdd3;
+
+  --accent: #4f46e5;
+  --accent-soft: #eef2ff;
+
+  --warn: #b45309;
+  --warn-soft: #fffbeb;
+  --warn-border: #fde68a;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0b0f19;
+    --surface: #131826;
+    --surface-muted: #1a2032;
+    --border: #262d40;
+    --border-strong: #38415a;
+
+    --foreground: #e9edf5;
+    --muted: #8b95a9;
+    --muted-strong: #aab3c5;
+
+    --gain: #34d399;
+    --gain-soft: #06281f;
+    --gain-border: #10593f;
+
+    --loss: #fb7185;
+    --loss-soft: #2c0f18;
+    --loss-border: #7f1d33;
+
+    --accent: #818cf8;
+    --accent-soft: #1e1b4b;
+
+    --warn: #fbbf24;
+    --warn-soft: #2a1f06;
+    --warn-border: #78500a;
   }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border-base: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-strong: var(--muted-strong);
+
+  --color-gain: var(--gain);
+  --color-gain-soft: var(--gain-soft);
+  --color-gain-border: var(--gain-border);
+
+  --color-loss: var(--loss);
+  --color-loss-soft: var(--loss-soft);
+  --color-loss-border: var(--loss-border);
+
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-border: var(--warn-border);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/**
+ * Tabular figures for every number in the app, so digits align in a column.
+ * With proportional digits a column of rupee amounts looks ragged and is measurably
+ * harder to scan and compare.
+ */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Price-change flash: a brief tint when a CMP moves, so live updates are noticeable
+   without the user having to stare at the number waiting for it to change. */
+@keyframes flash-gain {
+  0% {
+    background-color: var(--gain-soft);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+@keyframes flash-loss {
+  0% {
+    background-color: var(--loss-soft);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.flash-up {
+  animation: flash-gain 1.2s ease-out;
+}
+.flash-down {
+  animation: flash-loss 1.2s ease-out;
+}
+
+@keyframes pulse-ring {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.pulse-live {
+  animation: pulse-ring 2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-muted) 25%,
+    var(--border) 50%,
+    var(--surface-muted) 75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+/* Respect the OS reduce-motion setting. Flashes and pulses are decorative; for
+   motion-sensitive users they're actively unpleasant. No data is hidden by disabling them. */
+@media (prefers-reduced-motion: reduce) {
+  .flash-up,
+  .flash-down,
+  .pulse-live,
+  .skeleton {
+    animation: none;
+  }
+}
+
+/* Slim scrollbar for the horizontally-scrolling table on narrow screens. */
+.thin-scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 9999px;
 }
