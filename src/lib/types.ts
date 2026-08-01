@@ -8,25 +8,101 @@
  *                → SectorGroup (rows bucketed by sector + subtotals)
  */
 
-/** A single position as recorded in the portfolio sheet. Never changes at runtime. */
+/** Which national market a holding, watchlist entry, or movers list belongs to. */
+export type Market = "US" | "IN";
+
+/** A single *aggregated* position — one or more purchase lots collapsed to one row. */
 export interface Holding {
-  /** Stable id used as the React key and cache key. */
+  /** Stable id used as the React key and cache key: `${symbol}:${exchange}`. */
   id: string;
-  /** "Particulars" in the sheet — the display name of the stock. */
+  /** Display name of the stock. */
   name: string;
-  /** Base ticker, e.g. "HDFCBANK". Provider-specific suffixes are added per provider. */
+  /** Base ticker, e.g. "HDFCBANK" or "AAPL". Provider-specific suffixes are added per provider. */
   symbol: string;
-  /** Exchange the position is held on. Drives the NSE/BSE column. */
+  /** Exchange the position is held on. */
   exchange: Exchange;
+  /** Which national market this belongs to — drives currency formatting and grouping. */
+  market: Market;
+  /** ISO currency code the price/values are denominated in, e.g. "INR" or "USD". */
+  currency: string;
   /** Sector bucket used for grouping and subtotals. */
   sector: string;
-  /** Average purchase price per share, in INR. */
+  /** Weighted-average purchase price per share across all lots. */
   purchasePrice: number;
-  /** Number of shares held. */
+  /** Total shares held, summed across all lots. */
   quantity: number;
 }
 
-export type Exchange = "NSE" | "BSE";
+export type Exchange = "NSE" | "BSE" | "NASDAQ" | "NYSE";
+
+/** One manual buy exactly as entered by the user — the row stored in `holding_lot`. */
+export interface HoldingLot {
+  id: string;
+  symbol: string;
+  exchange: Exchange;
+  market: Market;
+  name: string;
+  sector: string;
+  quantity: number;
+  purchasePrice: number;
+  currency: string;
+  /** ISO date string, e.g. "2026-01-15". */
+  purchaseDate: string;
+}
+
+/** A saved watchlist entry — no position, just a symbol the user wants to track. */
+export interface WatchlistEntry {
+  id: string;
+  symbol: string;
+  exchange: Exchange;
+  market: Market;
+  name: string;
+}
+
+/** One autocomplete candidate from the company-name search box. */
+export interface SymbolSearchResult {
+  symbol: string;
+  name: string;
+  exchange: Exchange;
+  market: Market;
+  /** Null when Yahoo's search response didn't include a sector for this symbol. */
+  sector: string | null;
+}
+
+/**
+ * Filters for the stock screener. All optional — an unset bound means "no restriction on that
+ * side of the range." `nearHigh`/`nearLow` are boolean presets (within 5% of the 52-week
+ * extreme) rather than raw percentages, matching how screeners like Finviz surface this.
+ */
+export interface ScreenerFilters {
+  priceMin?: number;
+  priceMax?: number;
+  changePercentMin?: number;
+  changePercentMax?: number;
+  peMin?: number;
+  peMax?: number;
+  volumeMin?: number;
+  nearHigh?: boolean;
+  nearLow?: boolean;
+}
+
+/** One screener result row — enough to display, compare, and add straight to a watchlist. */
+export interface ScreenedStock {
+  symbol: string;
+  name: string;
+  exchange: Exchange;
+  market: Market;
+  currency: string;
+  price: number | null;
+  changePercent: number | null;
+  peRatio: number | null;
+  fiftyTwoWeekHigh: number | null;
+  fiftyTwoWeekLow: number | null;
+  /** % above(+)/below(-) the 52-week high — Yahoo computes this for us. */
+  percentFromHigh: number | null;
+  percentFromLow: number | null;
+  volume: number | null;
+}
 
 /** Real-time market data from Yahoo Finance. */
 export interface LiveQuote {
@@ -41,6 +117,18 @@ export interface LiveQuote {
   marketTime: number | null;
   /** e.g. "REGULAR", "CLOSED", "PRE" — used to tell the user if the market is open. */
   marketState: string | null;
+
+  // --- Extras: all present on the same batched Yahoo quote, at no extra cost. ---
+  previousClose: number | null;
+  open: number | null;
+  dayHigh: number | null;
+  dayLow: number | null;
+  fiftyTwoWeekHigh: number | null;
+  fiftyTwoWeekLow: number | null;
+  /** Trailing P/E, straight from Yahoo's quote — not the Google-scraped figure used elsewhere. */
+  peRatio: number | null;
+  volume: number | null;
+  marketCap: number | null;
 }
 
 /** Fundamentals scraped from Google Finance. */
@@ -125,6 +213,19 @@ export interface SectorGroup extends Totals {
   rows: PortfolioRow[];
 }
 
+/**
+ * One market's slice of a user's portfolio — its own sectors and totals.
+ *
+ * US and Indian holdings are denominated in different currencies, so a single blended grand
+ * total across both would be meaningless. Each market gets its own subtotal instead; there is
+ * no cross-market total anywhere in this app.
+ */
+export interface MarketGroup extends Totals {
+  market: Market;
+  currency: string;
+  sectors: SectorGroup[];
+}
+
 // ---------------------------------------------------------------------------
 // Stock detail page
 // ---------------------------------------------------------------------------
@@ -160,15 +261,7 @@ export interface PriceHistory {
 
 /** Intraday detail Yahoo gives us beyond the bare CMP. */
 export interface QuoteDetail extends LiveQuote {
-  previousClose: number | null;
-  open: number | null;
-  dayHigh: number | null;
-  dayLow: number | null;
-  volume: number | null;
   averageVolume: number | null;
-  marketCap: number | null;
-  fiftyTwoWeekHigh: number | null;
-  fiftyTwoWeekLow: number | null;
 }
 
 /** Company background, from Yahoo's profile module. */
@@ -212,9 +305,8 @@ export interface StockDetailResponse {
 
 /** The complete API payload returned by GET /api/portfolio. */
 export interface PortfolioResponse {
-  sectors: SectorGroup[];
-  totals: Totals;
-  /** Epoch ms the *prices* here were assembled. Moves on every quote tick. */
+  marketGroups: MarketGroup[];
+  /** Epoch ms the prices here were assembled. */
   updatedAt: number;
   /**
    * Epoch ms the oldest fundamentals in this payload were scraped — i.e. the worst-case age
@@ -223,63 +315,101 @@ export interface PortfolioResponse {
   fundamentalsUpdatedAt: number | null;
   /** Aggregate market state across quotes, e.g. "REGULAR" or "CLOSED". */
   marketState: string | null;
-  /**
-   * Provider-level problems worth telling the user about, split by the feed they came from.
-   * Two lists rather than one because the two feeds refresh on different clocks: a quote tick
-   * replaces `quoteWarnings` and must leave the fundamentals warnings — which it knows nothing
-   * about — untouched. A single merged list makes that impossible to do correctly.
-   *
-   * Row-level issues live in each row's `quoteStatus` / `fundamentalsStatus`.
-   */
   quoteWarnings: string[];
   fundamentalsWarnings: string[];
 }
 
 // ---------------------------------------------------------------------------
-// The fast poll
+// Public market overview — no auth required
 // ---------------------------------------------------------------------------
 
-/** The price-driven slice of a row — every field a quote tick is allowed to move. */
-export interface QuoteTickRow {
-  id: string;
-  cmp: number | null;
-  dayChange: number | null;
-  dayChangePercent: number | null;
-  presentValue: number | null;
-  gainLoss: number | null;
-  gainLossPercent: number | null;
-  quoteStatus: FieldStatus;
+/** A benchmark index quote, e.g. NIFTY 50 or the S&P 500. */
+export interface IndexQuote {
+  symbol: string;
+  name: string;
+  price: number | null;
+  change: number | null;
+  changePercent: number | null;
 }
 
-/**
- * The payload returned by GET /api/portfolio/quotes — polled every ~15s.
- *
- * Deliberately *not* a whole `PortfolioResponse`. It omits everything a price move cannot
- * change — names, quantities, exchanges, sectors, P/E, earnings, portfolio weights — so the
- * live poll carries a fraction of the bytes, never re-scrapes Google, and gives the client a
- * patch it can splice into what it already holds instead of a wholesale replacement.
- */
-export interface QuoteTick {
-  rows: QuoteTickRow[];
-  /** Sector subtotals, keyed by sector name: present value and gain/loss move with price. */
-  sectorTotals: Record<string, Totals>;
-  totals: Totals;
+/** One row in a top-10 daily gainers/losers list. */
+export interface MoverQuote {
+  symbol: string;
+  name: string;
+  price: number | null;
+  changePercent: number | null;
+  currency: string;
+}
+
+/** One market's slice of the public overview — indices plus its daily movers. */
+export interface MarketSnapshot {
+  market: Market;
+  indices: IndexQuote[];
+  gainers: MoverQuote[];
+  losers: MoverQuote[];
+}
+
+/** The payload returned by GET /api/market. */
+export interface MarketOverviewResponse {
+  markets: MarketSnapshot[];
+  /** Top cryptocurrencies by market cap — global and 24/7, so shown outside the US/India toggle. */
+  crypto: IndexQuote[];
+  /** Major commodity futures (gold, oil, …) — also global. */
+  commodities: IndexQuote[];
   updatedAt: number;
-  marketState: string | null;
-  /** Problems with the price feed only. Fundamentals aren't touched by this path. */
   warnings: string[];
 }
 
+// ---------------------------------------------------------------------------
+// Futures & options
+// ---------------------------------------------------------------------------
+
 /**
- * One frame pushed down the SSE stream.
- *
- * `nextTickAt` is the server telling the client when to expect the *next* frame. The client no
- * longer schedules anything, so it cannot work this out for itself — and it needs it, because
- * the status bar still draws a countdown ring. Without it a tab connecting midway through a
- * cycle would show a ring that empties several seconds before the data actually arrives.
+ * A continuous futures contract — the front-month ticker Yahoo quotes, not a specific expiry.
+ * Yahoo's free API has no chain of dated contracts per instrument, unlike equity options below;
+ * this is the honest ceiling of what's available without a licensed exchange feed.
  */
-export interface StreamFrame<T> {
-  data: T;
-  /** Epoch ms the server expects to push the next frame. */
-  nextTickAt: number;
+export interface FutureContract {
+  symbol: string;
+  name: string;
+  /** Plain-language note on what the contract tracks, curated app-side rather than from Yahoo. */
+  description: string;
+  category: "index" | "commodity";
+  price: number | null;
+  changePercent: number | null;
+  dayHigh: number | null;
+  dayLow: number | null;
+  fiftyTwoWeekHigh: number | null;
+  fiftyTwoWeekLow: number | null;
+  currency: string;
+}
+
+/** One call or put contract at a given strike. */
+export interface OptionContract {
+  contractSymbol: string;
+  strike: number;
+  lastPrice: number | null;
+  bid: number | null;
+  ask: number | null;
+  change: number | null;
+  percentChange: number | null;
+  volume: number | null;
+  openInterest: number | null;
+  impliedVolatility: number | null;
+  inTheMoney: boolean;
+}
+
+/** A real options chain — calls and puts for one underlying, at one expiration. */
+export interface OptionChainResponse {
+  symbol: string;
+  name: string;
+  underlyingPrice: number | null;
+  underlyingChangePercent: number | null;
+  currency: string;
+  /** Every expiration Yahoo lists, as ISO date strings — drives the date-picker. */
+  expirationDates: string[];
+  /** Which of `expirationDates` this chain's calls/puts belong to. */
+  expiration: string;
+  calls: OptionContract[];
+  puts: OptionContract[];
 }

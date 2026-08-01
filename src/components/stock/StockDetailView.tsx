@@ -11,8 +11,8 @@ import { useStockDetail } from "@/hooks/useStockDetail";
 import {
   directionOf,
   formatCompactNumber,
-  formatCrore,
   formatCurrency,
+  formatMarketCap,
   formatMarketState,
   formatPercent,
   formatPrice,
@@ -136,6 +136,7 @@ function StockHeader({
   onRefresh: () => void;
 }) {
   const { quote, history } = data;
+  const currency = quote?.currency ?? "INR";
   const market = formatMarketState(quote?.marketState ?? null);
 
   // While scrubbing the chart, the headline figures describe the hovered moment: the price at
@@ -176,7 +177,7 @@ function StockHeader({
         <div className="mt-2 flex flex-wrap items-baseline gap-3">
           {/* Proportional figures, not tabular: at display size, equal-width digits
               make a number like 1,221 look loose and gappy. */}
-          <span className="text-3xl font-semibold">{formatPrice(price)}</span>
+          <span className="text-3xl font-semibold">{formatPrice(price, currency)}</span>
 
           <span
             className={clsx(
@@ -184,7 +185,7 @@ function StockHeader({
               direction === "up" ? "text-gain" : direction === "down" ? "text-loss" : "text-muted",
             )}
           >
-            {formatSignedCurrency(change)} ({formatSignedPercent(changePercent)})
+            {formatSignedCurrency(change, currency)} ({formatSignedPercent(changePercent)})
           </span>
 
           <span className="text-xs text-muted">
@@ -282,6 +283,8 @@ function PositionCard({ data }: { data: StockDetailResponse }) {
   const p = data.position;
   if (!p) return null;
 
+  const currency = data.quote?.currency ?? "INR";
+
   return (
     <section className="rounded-xl border border-border-base bg-surface p-4 shadow-sm">
       <h2 className="text-sm font-semibold">Your Position</h2>
@@ -290,15 +293,15 @@ function PositionCard({ data }: { data: StockDetailResponse }) {
       <div className="mb-3 rounded-lg border border-border-base bg-surface-muted p-3">
         <p className="text-[11px] tracking-wide text-muted uppercase">Unrealised Gain / Loss</p>
         <div className="mt-1">
-          <GainLoss value={p.gainLoss} percent={p.gainLossPercent} size="lg" />
+          <GainLoss value={p.gainLoss} percent={p.gainLossPercent} currency={currency} size="lg" />
         </div>
       </div>
 
       <dl className="space-y-2 text-sm">
         <Stat label="Quantity" value={`${formatQuantity(p.quantity)} shares`} />
-        <Stat label="Avg. purchase price" value={formatPrice(p.purchasePrice)} />
-        <Stat label="Invested" value={formatCurrency(p.investment)} />
-        <Stat label="Present value" value={formatCurrency(p.presentValue)} />
+        <Stat label="Avg. purchase price" value={formatPrice(p.purchasePrice, currency)} />
+        <Stat label="Invested" value={formatCurrency(p.investment, currency)} />
+        <Stat label="Present value" value={formatCurrency(p.presentValue, currency)} />
         <Stat label="Portfolio weight" value={formatPercent(p.portfolioPercent)} />
       </dl>
     </section>
@@ -308,6 +311,7 @@ function PositionCard({ data }: { data: StockDetailResponse }) {
 function KeyStats({ data }: { data: StockDetailResponse }) {
   const q = data.quote;
   const f = data.fundamentals;
+  const currency = q?.currency ?? "INR";
 
   return (
     <section className="rounded-xl border border-border-base bg-surface p-4 shadow-sm lg:col-span-2">
@@ -319,13 +323,13 @@ function KeyStats({ data }: { data: StockDetailResponse }) {
       {/* One column on a phone. At two columns a value like "₹7,89,286 Cr" has to wrap onto a
           second line, splitting the number from its unit — which reads as a different number. */}
       <dl className="grid grid-cols-1 gap-x-6 gap-y-2.5 text-sm sm:grid-cols-2 lg:grid-cols-3">
-        <Stat label="Previous close" value={formatPrice(q?.previousClose)} />
-        <Stat label="Open" value={formatPrice(q?.open)} />
+        <Stat label="Previous close" value={formatPrice(q?.previousClose, currency)} />
+        <Stat label="Open" value={formatPrice(q?.open, currency)} />
         <Stat
           label="Day range"
           value={
             q?.dayLow != null && q?.dayHigh != null
-              ? `${formatPrice(q.dayLow)} – ${formatPrice(q.dayHigh)}`
+              ? `${formatPrice(q.dayLow, currency)} – ${formatPrice(q.dayHigh, currency)}`
               : "—"
           }
         />
@@ -333,11 +337,11 @@ function KeyStats({ data }: { data: StockDetailResponse }) {
           label="52-week range"
           value={
             q?.fiftyTwoWeekLow != null && q?.fiftyTwoWeekHigh != null
-              ? `${formatPrice(q.fiftyTwoWeekLow)} – ${formatPrice(q.fiftyTwoWeekHigh)}`
+              ? `${formatPrice(q.fiftyTwoWeekLow, currency)} – ${formatPrice(q.fiftyTwoWeekHigh, currency)}`
               : "—"
           }
         />
-        <Stat label="Market cap" value={formatCrore(q?.marketCap)} />
+        <Stat label="Market cap" value={formatMarketCap(q?.marketCap, currency)} />
         <Stat label="Volume" value={formatCompactNumber(q?.volume)} />
         <Stat label="Avg. volume (3m)" value={formatCompactNumber(q?.averageVolume)} />
 
@@ -345,12 +349,12 @@ function KeyStats({ data }: { data: StockDetailResponse }) {
         <Stat label="P/E ratio" value={formatRatio(f?.peRatio)} highlight />
         <Stat
           label="Latest earnings (EPS)"
-          value={f?.latestEarnings != null ? formatPrice(f.latestEarnings) : "—"}
+          value={f?.latestEarnings != null ? formatPrice(f.latestEarnings, currency) : "—"}
           highlight
         />
 
         <Stat label="Dividend yield" value={f?.dividendYield ?? "—"} />
-        <Stat label="Quarterly dividend" value={formatPrice(f?.quarterlyDividend)} />
+        <Stat label="Quarterly dividend" value={formatPrice(f?.quarterlyDividend, currency)} />
         <Stat label="Ex-dividend date" value={f?.exDividendDate ?? "—"} />
       </dl>
 

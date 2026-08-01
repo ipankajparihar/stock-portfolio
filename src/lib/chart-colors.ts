@@ -1,5 +1,3 @@
-import { HOLDINGS } from "@/data/holdings";
-
 /**
  * Categorical colours for sectors.
  *
@@ -35,32 +33,29 @@ const SECTOR_HUES: SectorHue[] = [
 ];
 
 /**
- * The canonical sector order, derived from the order sectors first appear in the holdings
- * file — a property of the data, not of the current view.
- *
- * This matters: the dashboard sorts sectors by size, and a user can filter rows out. If
- * colour were assigned by position in the *rendered* list, filtering or re-sorting would
- * repaint the survivors and "Technology is blue" would stop being true. Colour follows the
- * entity, never its rank.
- */
-const CANONICAL_SECTORS: string[] = [...new Set(HOLDINGS.map((h) => h.sector))];
-
-/**
  * The CSS colour for a sector, as a `light-dark()`-free pair resolved at call time.
  * Returns a CSS custom property reference so the browser swaps light/dark for us.
+ *
+ * Holdings are now per-user, so there is no single fixed "the order sectors appear in the
+ * data" the way there was with one shared demo portfolio — two different users' "Technology"
+ * sections would otherwise get different colours depending on what else happened to be in
+ * their own portfolio. Hashing the sector *name* instead gives every sector a stable colour
+ * across users, portfolios, filtering, and sorting alike.
  */
 export function sectorColorVar(sector: string): string {
   return `var(--sector-${slotOf(sector)})`;
 }
 
-/** Zero-based palette slot for a sector. Sectors beyond the 5th wrap — see note below. */
+/** Zero-based palette slot for a sector, stable for a given name across renders and users. */
 function slotOf(sector: string): number {
-  const index = CANONICAL_SECTORS.indexOf(sector);
-  // A portfolio with more than 5 sectors would need the "Other" bucket treatment rather
-  // than generated hues (a 9th generated hue is indistinguishable under CVD). With the
-  // current 5 sectors this modulo never actually wraps; it exists so an added sector
-  // degrades to a repeated hue rather than crashing.
-  return (index === -1 ? 0 : index) % SECTOR_HUES.length;
+  // A portfolio with more than 5 distinct sectors would need the "Other" bucket treatment
+  // rather than generated hues (a 9th generated hue is indistinguishable under CVD); this
+  // modulo just means an extra sector degrades to a repeated hue rather than crashing.
+  let hash = 0;
+  for (let i = 0; i < sector.length; i++) {
+    hash = (hash * 31 + sector.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) % SECTOR_HUES.length;
 }
 
 /** Emitted once into the document so the vars exist for both themes. */

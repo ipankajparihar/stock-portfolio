@@ -16,8 +16,10 @@ import { directionOf, formatSignedCurrency, formatSignedPercent } from "@/lib/fo
 
 interface GainLossProps {
   value: number | null;
-  /** Optional % shown beneath/beside the rupee figure. */
+  /** Optional % shown beneath/beside the currency figure. */
   percent?: number | null;
+  /** ISO currency code the value is denominated in. Defaults to INR. */
+  currency?: string;
   size?: "sm" | "md" | "lg";
   /** Render as a filled pill — used where the figure is the headline, not a table cell. */
   pill?: boolean;
@@ -29,6 +31,7 @@ interface GainLossProps {
 export function GainLoss({
   value,
   percent,
+  currency = "INR",
   size = "sm",
   pill = false,
   hideIcon = false,
@@ -69,14 +72,14 @@ export function GainLoss({
       aria-label={
         direction === "unknown"
           ? "Value unavailable"
-          : `${direction === "up" ? "Gain" : direction === "down" ? "Loss" : "No change"} of ${formatSignedCurrency(value)}`
+          : `${direction === "up" ? "Gain" : direction === "down" ? "Loss" : "No change"} of ${formatSignedCurrency(value, currency)}`
       }
     >
       {!hideIcon && direction !== "unknown" && (
         <Icon size={iconSize} strokeWidth={2.5} aria-hidden="true" className="shrink-0" />
       )}
 
-      <span>{formatSignedCurrency(value)}</span>
+      <span>{formatSignedCurrency(value, currency)}</span>
 
       {percent != null && (
         <span className={clsx("font-medium opacity-75", size === "lg" ? "text-base" : "text-xs")}>

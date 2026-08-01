@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { SiteHeader } from "@/components/SiteHeader";
 import { sectorColorStyles } from "@/lib/chart-colors";
 import "./globals.css";
 
@@ -34,7 +35,10 @@ export default function RootLayout({
             charts and their legends can reference the slots as CSS variables. */}
         <style dangerouslySetInnerHTML={{ __html: sectorColorStyles() }} />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <SiteHeader />
+        {children}
+      </body>
     </html>
   );
 }

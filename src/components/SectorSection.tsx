@@ -23,6 +23,7 @@ import type { SectorGroup } from "@/lib/types";
 
 interface SectorSectionProps {
   group: SectorGroup;
+  currency: string;
   isExpanded: boolean;
   onToggle: (sector: string) => void;
   sorting: SortingState;
@@ -31,6 +32,7 @@ interface SectorSectionProps {
 
 export const SectorSection = memo(function SectorSection({
   group,
+  currency,
   isExpanded,
   onToggle,
   sorting,
@@ -77,12 +79,12 @@ export const SectorSection = memo(function SectorSection({
 
           {/* Subtotals — the reason this header exists */}
           <span className="flex flex-wrap items-center gap-x-6 gap-y-2">
-            <Stat label="Investment" value={formatCurrency(group.investment)} />
-            <Stat label="Present Value" value={formatCurrency(group.presentValue)} />
+            <Stat label="Investment" value={formatCurrency(group.investment, currency)} />
+            <Stat label="Present Value" value={formatCurrency(group.presentValue, currency)} />
 
             <span className="flex flex-col">
               <span className="text-[11px] tracking-wide text-muted uppercase">Gain / Loss</span>
-              <GainLoss value={group.gainLoss} percent={group.gainLossPercent} />
+              <GainLoss value={group.gainLoss} percent={group.gainLossPercent} currency={currency} />
             </span>
 
             <Stat label="Weight" value={formatPercent(group.portfolioPercent)} />
@@ -95,6 +97,7 @@ export const SectorSection = memo(function SectorSection({
       <div id={panelId} hidden={!isExpanded}>
         <PortfolioTable
           rows={group.rows}
+          currency={currency}
           sorting={sorting}
           onSortingChange={onSortingChange}
         />

@@ -1,18 +1,53 @@
-import { PortfolioDashboard } from "@/components/PortfolioDashboard";
+import { auth } from "@/auth";
+import { Hero } from "@/components/landing/Hero";
+import { FeatureGrid, SectionHeading } from "@/components/landing/FeatureGrid";
+import { FinalCta } from "@/components/landing/FinalCta";
+import { CryptoCommodityWatch } from "@/components/market/CryptoCommodityWatch";
+import { MarketDataProvider } from "@/components/market/MarketDataContext";
+import { MarketOverview } from "@/components/market/MarketOverview";
+import { MarketTicker } from "@/components/market/MarketTicker";
 
 /**
- * The dashboard is client-rendered on purpose.
+ * The public landing page — no auth required.
  *
- * Its defining feature is a live, self-refreshing price feed, so there is nothing worth
- * prerendering: a server-rendered snapshot of prices would be stale before it reached the
- * browser, and it would put a slow provider fetch on the critical path of the first paint.
- * Instead the shell paints instantly with a skeleton and streams real data in from the Node
- * route handler.
+ * Everything live (the ticker strip, the hero's market-pulse card, and the market board) is
+ * wrapped in a single `MarketDataProvider`, so the whole page runs off one poll of `/api/market`
+ * rather than three. The hero and CTA sections are session-aware server components; they render
+ * inside the client provider as children, which the provider's live descendants read through
+ * context regardless.
  */
-export default function Home() {
+export default async function Home() {
+  const session = await auth();
+  const isAuthed = !!session?.user;
+
   return (
-    <main className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
-      <PortfolioDashboard />
-    </main>
+    <MarketDataProvider>
+      <MarketTicker />
+      <Hero isAuthed={isAuthed} />
+
+      <div className="mx-auto w-full max-w-[1400px] space-y-16 px-4 py-16 sm:px-6 lg:px-8">
+        <FeatureGrid />
+
+        <section id="markets" className="scroll-mt-20 space-y-6">
+          <SectionHeading
+            eyebrow="Today's markets"
+            title="Where the market is moving right now"
+            subtitle="Live index levels and the day's biggest gainers and losers, for the US and India."
+          />
+          <MarketOverview />
+        </section>
+
+        <section className="space-y-6">
+          <SectionHeading
+            eyebrow="Beyond equities"
+            title="Crypto and commodities, live"
+            subtitle="Top cryptocurrencies by market cap and the major commodity futures — gold, oil, and more."
+          />
+          <CryptoCommodityWatch />
+        </section>
+
+        <FinalCta isAuthed={isAuthed} />
+      </div>
+    </MarketDataProvider>
   );
 }

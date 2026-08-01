@@ -44,13 +44,14 @@ import type { SectorGroup } from "@/lib/types";
 
 interface SectorChartsProps {
   sectors: SectorGroup[];
+  currency: string;
 }
 
-export const SectorCharts = memo(function SectorCharts({ sectors }: SectorChartsProps) {
+export const SectorCharts = memo(function SectorCharts({ sectors, currency }: SectorChartsProps) {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <AllocationBar sectors={sectors} />
-      <GainLossBar sectors={sectors} />
+      <GainLossBar sectors={sectors} currency={currency} />
     </div>
   );
 });
@@ -139,7 +140,7 @@ interface GainLossDatum {
   presentValue: number;
 }
 
-function GainLossBar({ sectors }: { sectors: SectorGroup[] }) {
+function GainLossBar({ sectors, currency }: { sectors: SectorGroup[]; currency: string }) {
   // Sorted worst → best so the eye travels down a monotonic ramp rather than a jumble.
   const data: GainLossDatum[] = [...sectors]
     .sort((a, b) => a.gainLoss - b.gainLoss)
@@ -185,7 +186,10 @@ function GainLossBar({ sectors }: { sectors: SectorGroup[] }) {
           {/* The zero baseline — the whole point of a diverging chart. Solid hairline. */}
           <ReferenceLine x={0} stroke="var(--border-strong)" strokeWidth={1} />
 
-          <Tooltip cursor={{ fill: "var(--surface-muted)" }} content={<ChartTooltip />} />
+          <Tooltip
+            cursor={{ fill: "var(--surface-muted)" }}
+            content={<ChartTooltip currency={currency} />}
+          />
 
           <Bar dataKey="gainLoss" radius={4} barSize={16} isAnimationActive={false}>
             {data.map((d) => (
@@ -205,7 +209,7 @@ function GainLossBar({ sectors }: { sectors: SectorGroup[] }) {
               dataKey="gainLoss"
               position="right"
               formatter={(value: unknown) =>
-                typeof value === "number" ? formatCompactSignedCurrency(value) : "—"
+                typeof value === "number" ? formatCompactSignedCurrency(value, currency) : "—"
               }
               style={{ fill: "var(--muted-strong)", fontSize: 10, fontWeight: 600 }}
             />
@@ -220,9 +224,11 @@ function GainLossBar({ sectors }: { sectors: SectorGroup[] }) {
 function ChartTooltip({
   active,
   payload,
+  currency,
 }: {
   active?: boolean;
   payload?: { payload: GainLossDatum }[];
+  currency: string;
 }) {
   if (!active || !payload?.length) return null;
 
@@ -233,11 +239,11 @@ function ChartTooltip({
       <p className="mb-1 font-semibold">{d.sector}</p>
 
       <dl className="space-y-0.5 text-muted">
-        <Row label="Invested" value={formatCurrency(d.investment)} />
-        <Row label="Present" value={formatCurrency(d.presentValue)} />
+        <Row label="Invested" value={formatCurrency(d.investment, currency)} />
+        <Row label="Present" value={formatCurrency(d.presentValue, currency)} />
         <Row
           label="Gain / Loss"
-          value={`${formatSignedCurrency(d.gainLoss)} (${formatSignedPercent(d.gainLossPercent)})`}
+          value={`${formatSignedCurrency(d.gainLoss, currency)} (${formatSignedPercent(d.gainLossPercent)})`}
           tone={d.gainLoss >= 0 ? "gain" : "loss"}
         />
       </dl>
