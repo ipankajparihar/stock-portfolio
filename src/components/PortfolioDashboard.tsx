@@ -2,7 +2,15 @@
 
 import { useCallback, useMemo, useState } from "react";
 import type { SortingState } from "@tanstack/react-table";
-import { AlertTriangle, LayoutList, Search, Rows3, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Layers,
+  LayoutList,
+  Search,
+  Rows3,
+  Wallet,
+  X,
+} from "lucide-react";
 import clsx from "clsx";
 import { PortfolioTable } from "@/components/PortfolioTable";
 import { SectorCharts } from "@/components/SectorCharts";
@@ -12,13 +20,19 @@ import { StatusBar } from "@/components/StatusBar";
 import { Banner } from "@/components/ui/Banner";
 import { GainLoss } from "@/components/ui/GainLoss";
 import { usePortfolio } from "@/hooks/usePortfolio";
-import { formatCurrency } from "@/lib/format";
-import type { PortfolioResponse, PortfolioRow, SectorGroup } from "@/lib/types";
+import { directionOf, formatCurrency } from "@/lib/format";
+import type { MarketGroup, SectorGroup } from "@/lib/types";
+
+const MARKET_LABEL: Record<string, string> = { US: "United States", IN: "India" };
+const MARKET_FLAG: Record<string, string> = { US: "🇺🇸", IN: "🇮🇳" };
 
 /**
  * The dashboard shell: owns view state (search, grouping, sorting, expansion) and composes
  * everything else. All *data* state lives in `usePortfolio`; all *derived* data lives on the
  * server. This component only decides what is shown.
+ *
+ * One full section is rendered per market group — US and Indian holdings are denominated in
+ * different currencies, so there is no single blended total to show at the top of the page.
  */
 
 export function PortfolioDashboard() {
@@ -33,40 +47,20 @@ export function PortfolioDashboard() {
     refresh,
   } = usePortfolio();
 
-  const [query, setQuery] = useState("");
-  const [grouped, setGrouped] = useState(true);
-  const [sorting, setSorting] = useState<SortingState>([]);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-
-  const toggleSector = useCallback((sector: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(sector)) next.delete(sector);
-      else next.add(sector);
-      return next;
-    });
-  }, []);
-
-  // Search filters which *rows* are visible. It deliberately does NOT recompute sector
-  // subtotals or portfolio weights: those are facts about the portfolio, not about the
-  // current search box. Showing "Technology: ₹90,000" because you filtered to one stock
-  // would be inventing a number.
-  const { sectors, flatRows, matchCount, totalCount } = useFilteredSectors(data, query);
-
   if (isInitialLoading) return <DashboardSkeleton />;
 
   // Only reachable when the very first load failed and there's nothing to show.
   if (!data) return <FatalError message={error} onRetry={refresh} />;
 
-  // The page has no refreshing state, by design. Updates are pushed, land silently, and only the
-  // cells whose price actually moved react — see the note atop `usePortfolio`. Dimming the whole
-  // dashboard to announce an incoming frame would make every update feel like a page load.
   return (
     <div className="space-y-5">
       <header className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold sm:text-2xl">Portfolio Dashboard</h1>
+            <h1 className="flex items-center gap-2 text-xl font-semibold sm:text-2xl">
+              <Wallet size={22} className="text-accent" aria-hidden="true" />
+              Your Portfolio
+            </h1>
             <p className="text-sm text-muted">
               Live prices from Yahoo Finance · Fundamentals from Google Finance
             </p>
@@ -85,20 +79,63 @@ export function PortfolioDashboard() {
         />
       </header>
 
-      {/* A failed refresh is a warning, not a takeover: the last good data is still on screen. */}
       {error && <Banner tone="error" message={`Refresh failed: ${error}. Showing last known data.`} />}
       {[...data.quoteWarnings, ...data.fundamentalsWarnings].map((warning) => (
         <Banner key={warning} tone="warn" message={warning} />
       ))}
 
-      {/* Sub-slices, not the whole payload: a quote tick always bumps `data.updatedAt`, so a
-          component memo'd on `data` would re-render on every tick even when nothing it draws
-          moved. Passing only what it reads lets the memo actually hold. */}
-      <SummaryCards totals={data.totals} sectors={data.sectors} />
+      {data.marketGroups.length === 0 ? (
+        <NoHoldingsEmptyState />
+      ) : (
+        data.marketGroups.map((group) => (
+          <MarketSection key={group.market} group={group} />
+        ))
+      )}
 
-      <SectorCharts sectors={data.sectors} />
+      <Disclaimer />
+    </div>
+  );
+}
 
-      {/* One filter row, above everything it scopes. */}
+// ---------------------------------------------------------------------------
+// One market's section
+// ---------------------------------------------------------------------------
+
+function MarketSection({ group }: { group: MarketGroup }) {
+  const [query, setQuery] = useState("");
+  const [grouped, setGrouped] = useState(true);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const toggleSector = useCallback((sector: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(sector)) next.delete(sector);
+      else next.add(sector);
+      return next;
+    });
+  }, []);
+
+  const { sectors, flatRows, matchCount, totalCount } = useFilteredSectors(group.sectors, query);
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center gap-2.5">
+        <span className="text-xl" aria-hidden="true">
+          {MARKET_FLAG[group.market] ?? "🌐"}
+        </span>
+        <h2 className="text-lg font-semibold">{MARKET_LABEL[group.market] ?? group.market}</h2>
+        <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-muted">
+          {group.currency}
+        </span>
+        <span className="text-xs text-muted">
+          {totalCount} position{totalCount === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      <SummaryCards totals={group} sectors={group.sectors} currency={group.currency} />
+      <SectorCharts sectors={group.sectors} currency={group.currency} />
+
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
           <Search
@@ -111,11 +148,8 @@ export function PortfolioDashboard() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search stock or symbol…"
-            aria-label="Search holdings by name or symbol"
-            className={clsx(
-              "w-full rounded-lg border border-border-base bg-surface py-2 pr-8 pl-9 text-sm",
-              "placeholder:text-muted focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:outline-none",
-            )}
+            aria-label={`Search ${group.market} holdings by name or symbol`}
+            className="input pl-9"
           />
           {query && (
             <button
@@ -152,16 +186,16 @@ export function PortfolioDashboard() {
         )}
       </div>
 
-      {/* Holdings */}
       {matchCount === 0 ? (
         <EmptyState query={query} onClear={() => setQuery("")} />
       ) : grouped ? (
         <div className="space-y-3">
-          {sectors.map((group) => (
+          {sectors.map((sectorGroup) => (
             <SectorSection
-              key={group.sector}
-              group={group}
-              isExpanded={!collapsed.has(group.sector)}
+              key={sectorGroup.sector}
+              group={sectorGroup}
+              currency={group.currency}
+              isExpanded={!collapsed.has(sectorGroup.sector)}
               onToggle={toggleSector}
               sorting={sorting}
               onSortingChange={setSorting}
@@ -170,15 +204,17 @@ export function PortfolioDashboard() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border-base bg-surface shadow-sm">
-          <PortfolioTable rows={flatRows} sorting={sorting} onSortingChange={setSorting} />
+          <PortfolioTable
+            rows={flatRows}
+            currency={group.currency}
+            sorting={sorting}
+            onSortingChange={setSorting}
+          />
         </div>
       )}
 
-      {/* Grand total — the bottom line, always visible regardless of grouping or filter. */}
-      <TotalsBar data={data} />
-
-      <Disclaimer />
-    </div>
+      {matchCount > 0 && <TotalsFooter group={group} />}
+    </section>
   );
 }
 
@@ -186,23 +222,13 @@ export function PortfolioDashboard() {
 // Filtering
 // ---------------------------------------------------------------------------
 
-/**
- * The `useMemo` is load-bearing, not decoration. `sectors` and `flatRows` are handed straight
- * to `memo`'d children, so they have to keep their identity across every render that didn't
- * actually change them — a fresh array here would defeat the memo, and for `flatRows` it would
- * also make TanStack rebuild the whole row and sort model from scratch on each render.
- */
-function useFilteredSectors(data: PortfolioResponse | null, query: string) {
+function useFilteredSectors(allSectors: SectorGroup[], query: string) {
   return useMemo(() => {
-    if (!data) {
-      return { sectors: [] as SectorGroup[], flatRows: [] as PortfolioRow[], matchCount: 0, totalCount: 0 };
-    }
-
-    const totalCount = data.sectors.reduce((n, s) => n + s.rows.length, 0);
+    const totalCount = allSectors.reduce((n, s) => n + s.rows.length, 0);
     const needle = query.trim().toLowerCase();
 
     const sectors = needle
-      ? data.sectors
+      ? allSectors
           .map((group) => ({
             ...group,
             rows: group.rows.filter(
@@ -213,37 +239,59 @@ function useFilteredSectors(data: PortfolioResponse | null, query: string) {
             ),
           }))
           .filter((group) => group.rows.length > 0)
-      : data.sectors;
+      : allSectors;
 
     const flatRows = sectors.flatMap((s) => s.rows);
     return { sectors, flatRows, matchCount: flatRows.length, totalCount };
-  }, [data, query]);
+  }, [allSectors, query]);
 }
 
 // ---------------------------------------------------------------------------
 // Chrome
 // ---------------------------------------------------------------------------
 
-function TotalsBar({ data }: { data: PortfolioResponse }) {
-  const { totals } = data;
+/**
+ * The grand total, restated right after the holdings list. After scrolling past a dozen rows
+ * the reader has lost the summary shown at the top — this puts it back exactly where their eye
+ * lands next, styled as a verdict strip (colour-coded to the outcome) rather than a repeat of
+ * `SummaryCards`'s neutral stat tiles.
+ */
+function TotalsFooter({ group }: { group: MarketGroup }) {
+  const direction = directionOf(group.gainLoss);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl border border-border-strong bg-surface-muted px-4 py-3 shadow-sm">
-      <span className="text-sm font-semibold">Portfolio Total</span>
+    <div
+      className={clsx(
+        "flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl border border-border-strong bg-surface-muted px-4 py-3.5 shadow-sm",
+        direction === "up"
+          ? "border-l-4 border-l-gain"
+          : direction === "down"
+            ? "border-l-4 border-l-loss"
+            : "border-l-4 border-l-border-strong",
+      )}
+    >
+      <span className="flex items-center gap-1.5 text-sm font-semibold">
+        <Layers size={15} className="text-muted" aria-hidden="true" />
+        Total
+      </span>
 
       <span className="flex flex-col">
         <span className="text-[11px] tracking-wide text-muted uppercase">Investment</span>
-        <span className="text-sm font-semibold tabular">{formatCurrency(totals.investment)}</span>
+        <span className="text-sm font-semibold tabular">
+          {formatCurrency(group.investment, group.currency)}
+        </span>
       </span>
 
       <span className="flex flex-col">
         <span className="text-[11px] tracking-wide text-muted uppercase">Present Value</span>
-        <span className="text-sm font-semibold tabular">{formatCurrency(totals.presentValue)}</span>
+        <span className="text-sm font-semibold tabular">
+          {formatCurrency(group.presentValue, group.currency)}
+        </span>
       </span>
 
       <span className="flex flex-col">
         <span className="text-[11px] tracking-wide text-muted uppercase">Gain / Loss</span>
-        <GainLoss value={totals.gainLoss} percent={totals.gainLossPercent} size="md" />
+        <GainLoss value={group.gainLoss} percent={group.gainLossPercent} currency={group.currency} size="md" />
       </span>
     </div>
   );
@@ -261,6 +309,27 @@ function EmptyState({ query, onClear }: { query: string; onClear: () => void }) 
       >
         Clear search
       </button>
+    </div>
+  );
+}
+
+function NoHoldingsEmptyState() {
+  return (
+    <div className="rounded-xl border border-dashed border-border-strong bg-surface p-12 text-center">
+      <span className="mx-auto inline-flex size-12 items-center justify-center rounded-full bg-accent-soft text-accent">
+        <Wallet size={22} aria-hidden="true" />
+      </span>
+      <h2 className="mt-4 text-base font-semibold">You haven’t added any holdings yet</h2>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
+        Record a purchase — symbol, quantity, price, and date — and it will show up here with a
+        live price and gain/loss.
+      </p>
+      <a
+        href="#manage-holdings"
+        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90"
+      >
+        Add your first holding
+      </a>
     </div>
   );
 }

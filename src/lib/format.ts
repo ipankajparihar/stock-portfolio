@@ -1,8 +1,9 @@
 /**
  * Display formatting.
  *
- * Every figure in this app is INR, so amounts use the Indian numbering system
- * (₹14,72,893 — lakhs/crores grouping, not ₹1,472,893). `en-IN` gets this right.
+ * Most figures in this app are INR, so every currency formatter defaults to it and uses the
+ * Indian numbering system (₹14,72,893 — lakhs/crores grouping, not ₹1,472,893). US holdings
+ * pass `currency: "USD"`, which switches both the symbol and the grouping to `en-US`.
  *
  * Null is a first-class case throughout: a missing price must render as "—", never as
  * "₹0" or "NaN". In a financial table those would be read as real values.
@@ -10,18 +11,29 @@
 
 const EM_DASH = "—";
 
-const currency = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  maximumFractionDigits: 0,
-});
+/** `en-IN` grouping for INR, `en-US` for everything else — each currency reads the way its market expects. */
+function localeFor(currencyCode: string): string {
+  return currencyCode === "INR" ? "en-IN" : "en-US";
+}
 
-const currencyPrecise = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+const formatterCache = new Map<string, Intl.NumberFormat>();
+
+function currencyFormatter(
+  currencyCode: string,
+  options: Intl.NumberFormatOptions,
+): Intl.NumberFormat {
+  const key = `${currencyCode}:${JSON.stringify(options)}`;
+  let formatter = formatterCache.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(localeFor(currencyCode), {
+      style: "currency",
+      currency: currencyCode,
+      ...options,
+    });
+    formatterCache.set(key, formatter);
+  }
+  return formatter;
+}
 
 const decimal = new Intl.NumberFormat("en-IN", {
   minimumFractionDigits: 2,
@@ -30,21 +42,27 @@ const decimal = new Intl.NumberFormat("en-IN", {
 
 const integer = new Intl.NumberFormat("en-IN");
 
-/** Whole rupees — for investments, present values, totals. */
-export function formatCurrency(value: number | null | undefined): string {
-  return isNum(value) ? currency.format(value) : EM_DASH;
+/** Whole units — for investments, present values, totals. */
+export function formatCurrency(value: number | null | undefined, currency = "INR"): string {
+  return isNum(value)
+    ? currencyFormatter(currency, { maximumFractionDigits: 0 }).format(value)
+    : EM_DASH;
 }
 
-/** Paise precision — for per-share prices, where 2dp actually matters. */
-export function formatPrice(value: number | null | undefined): string {
-  return isNum(value) ? currencyPrecise.format(value) : EM_DASH;
+/** 2dp precision — for per-share prices, where cents/paise actually matter. */
+export function formatPrice(value: number | null | undefined, currency = "INR"): string {
+  return isNum(value)
+    ? currencyFormatter(currency, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
+        value,
+      )
+    : EM_DASH;
 }
 
-/** Signed rupees, e.g. "+₹24,565" / "-₹9,444" — the sign carries meaning here. */
-export function formatSignedCurrency(value: number | null | undefined): string {
+/** Signed currency, e.g. "+₹24,565" / "-$9,444" — the sign carries meaning here. */
+export function formatSignedCurrency(value: number | null | undefined, currency = "INR"): string {
   if (!isNum(value)) return EM_DASH;
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
-  return `${sign}${currency.format(Math.abs(value))}`;
+  return `${sign}${currencyFormatter(currency, { maximumFractionDigits: 0 }).format(Math.abs(value))}`;
 }
 
 /** Signed percentage, e.g. "+9.38%". */
@@ -55,24 +73,24 @@ export function formatSignedPercent(value: number | null | undefined): string {
 }
 
 /**
- * Compact signed rupees for chart labels, e.g. "+₹35.3K" / "-₹1.2L".
+ * Compact signed currency for chart labels, e.g. "+₹35.3K" / "-$1.2M".
  *
  * Chart plots are narrow — a full "-₹68,886" label on a short bar either overlaps the axis
- * labels or gets clipped, which is the classic chart-label failure. `en-IN` compact notation
- * gives the Indian lakh/crore scale (K → L → Cr) and roughly halves the label width.
- * The exact figure is always available in the tooltip and in the table below.
+ * labels or gets clipped, which is the classic chart-label failure. Compact notation gives the
+ * market's own scale (K → L → Cr for INR, K → M → B for USD) and roughly halves the label width.
+ * The exact figure is always available in the tooltip and in the table.
  */
-const compactCurrency = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
-export function formatCompactSignedCurrency(value: number | null | undefined): string {
+export function formatCompactSignedCurrency(
+  value: number | null | undefined,
+  currency = "INR",
+): string {
   if (!isNum(value)) return EM_DASH;
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
-  return `${sign}${spaceUnits(compactCurrency.format(Math.abs(value)))}`;
+  const formatted = currencyFormatter(currency, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(Math.abs(value));
+  return `${sign}${spaceUnits(formatted)}`;
 }
 
 const compactNumber = new Intl.NumberFormat("en-IN", {
@@ -83,7 +101,7 @@ const compactNumber = new Intl.NumberFormat("en-IN", {
 const croreNumber = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
 
 /**
- * Market cap, in crore — "₹7,89,123 Cr".
+ * Market cap, in crore — "₹7,89,123 Cr". INR only — the conventional Indian unit.
  *
  * `Intl` compact notation would render this as "₹7.9LCr" (lakh-crore), which is both
  * unreadable and not how any Indian exchange or broker quotes a market cap. Crore is the
@@ -92,6 +110,21 @@ const croreNumber = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 })
 export function formatCrore(value: number | null | undefined): string {
   if (!isNum(value)) return EM_DASH;
   return `₹${croreNumber.format(value / 1e7)} Cr`;
+}
+
+/**
+ * Market cap for non-INR currencies — compact notation ("$2.8T", "$412.6B") is exactly how US
+ * markets conventionally quote cap, unlike the INR case above.
+ */
+export function formatMarketCap(value: number | null | undefined, currency = "INR"): string {
+  if (currency === "INR") return formatCrore(value);
+  return isNum(value)
+    ? spaceUnits(
+        currencyFormatter(currency, { notation: "compact", maximumFractionDigits: 1 }).format(
+          value,
+        ),
+      )
+    : EM_DASH;
 }
 
 /** Compact share counts — volume renders as "2.17 Cr", avg volume as "48.51 L". */

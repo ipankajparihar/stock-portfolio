@@ -1,18 +1,13 @@
 /**
- * How often each feed is refreshed.
+ * How often the client polls `/api/portfolio`.
  *
- * These live apart from both the server hub and the client hook because the two now sit on
- * opposite ends of a stream and must agree: the hub schedules against them, and the status bar
- * draws its countdown ring against them. A cadence that disagreed across that boundary would
- * show a ring that empties before (or long after) the data it's promising actually lands.
+ * Matches the server's quote TTL in `portfolio-service.ts`, so a poll and a cache expiry line
+ * up — polling faster than the cache refreshes would just re-serve the same cached response.
  */
-
-/** Prices. Matches the server's quote TTL, so a cycle and a cache expiry line up. */
 export const QUOTE_INTERVAL_MS = 15_000;
 
 /**
- * The full payload, fundamentals included. P/E and EPS move when a company reports, not tick by
- * tick, and the scrape behind them is cached for 30 minutes per symbol (staggered), so this
- * picks each one up promptly after it expires without ever being the thing that triggers it.
+ * How often the public market/derivatives pages poll. Matches the open-market TTLs in
+ * `market-service.ts` and `derivatives-service.ts` for the same reason.
  */
-export const FULL_INTERVAL_MS = 5 * 60_000;
+export const MARKET_INTERVAL_MS = 60_000;

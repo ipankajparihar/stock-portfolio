@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   flexRender,
   getCoreRowModel,
@@ -72,20 +72,25 @@ const TABLE_MIN_WIDTH = 1280;
 /** Sorting state lives in the parent so all sector tables sort in step with one another. */
 interface PortfolioTableProps {
   rows: PortfolioRow[];
+  /** ISO currency code every row is denominated in — a table never mixes currencies. */
+  currency?: string;
   sorting: SortingState;
   onSortingChange: OnChangeFn<SortingState>;
 }
 
 export const PortfolioTable = memo(function PortfolioTable({
   rows,
+  currency = "INR",
   sorting,
   onSortingChange,
 }: PortfolioTableProps) {
   const router = useRouter();
 
+  const columns = useMemo(() => buildColumns(currency), [currency]);
+
   const table = useReactTable({
     data: rows,
-    columns: COLUMNS,
+    columns,
     state: { sorting },
     onSortingChange,
     getCoreRowModel: getCoreRowModel(),
@@ -104,7 +109,7 @@ export const PortfolioTable = memo(function PortfolioTable({
       >
         {/* Widths declared once, applied identically by every sector's table. */}
         <colgroup>
-          {COLUMNS.map((column) => (
+          {columns.map((column) => (
             <col key={column.id} style={{ width: column.meta?.width }} />
           ))}
         </colgroup>
@@ -205,7 +210,8 @@ export const PortfolioTable = memo(function PortfolioTable({
 // Columns
 // ---------------------------------------------------------------------------
 
-const COLUMNS: ColumnDef<PortfolioRow>[] = [
+function buildColumns(currency: string): ColumnDef<PortfolioRow>[] {
+  return [
   {
     id: "particulars",
     accessorKey: "name",
@@ -237,7 +243,7 @@ const COLUMNS: ColumnDef<PortfolioRow>[] = [
     accessorKey: "purchasePrice",
     header: "Purchase Price",
     meta: { numeric: true, width: 110 },
-    cell: ({ getValue }) => formatPrice(getValue<number>()),
+    cell: ({ getValue }) => formatPrice(getValue<number>(), currency),
   },
   {
     id: "quantity",
@@ -252,7 +258,7 @@ const COLUMNS: ColumnDef<PortfolioRow>[] = [
     header: "Investment",
     meta: { numeric: true, width: 105 },
     cell: ({ getValue }) => (
-      <span className="font-medium">{formatCurrency(getValue<number>())}</span>
+      <span className="font-medium">{formatCurrency(getValue<number>(), currency)}</span>
     ),
   },
   {
@@ -284,7 +290,7 @@ const COLUMNS: ColumnDef<PortfolioRow>[] = [
   {
     id: "exchange",
     accessorKey: "exchange",
-    header: "NSE/BSE",
+    header: "Exchange",
     meta: { width: 80 },
     cell: ({ getValue }) => (
       <span className="rounded border border-border-base bg-surface-muted px-1.5 py-0.5 text-xs font-medium text-muted-strong">
@@ -297,7 +303,7 @@ const COLUMNS: ColumnDef<PortfolioRow>[] = [
     accessorKey: "cmp",
     header: "CMP",
     meta: { numeric: true, width: 100 },
-    cell: ({ row }) => <CmpCell row={row.original} />,
+    cell: ({ row }) => <CmpCell row={row.original} currency={currency} />,
   },
   {
     id: "presentValue",
@@ -305,7 +311,7 @@ const COLUMNS: ColumnDef<PortfolioRow>[] = [
     header: "Present Value",
     meta: { numeric: true, width: 115 },
     cell: ({ getValue }) => (
-      <span className="font-medium">{formatCurrency(getValue<number | null>())}</span>
+      <span className="font-medium">{formatCurrency(getValue<number | null>(), currency)}</span>
     ),
   },
   {
@@ -318,6 +324,7 @@ const COLUMNS: ColumnDef<PortfolioRow>[] = [
         <GainLoss
           value={row.original.gainLoss}
           percent={row.original.gainLossPercent}
+          currency={currency}
           hideIcon
         />
       </div>
@@ -358,7 +365,7 @@ const COLUMNS: ColumnDef<PortfolioRow>[] = [
       return (
         <div className="flex flex-col items-end">
           <span className="font-medium">
-            {latestEarnings == null ? "—" : `${formatPrice(latestEarnings)} EPS`}
+            {latestEarnings == null ? "—" : `${formatPrice(latestEarnings, currency)} EPS`}
           </span>
           {earningsEvent && (
             <span
@@ -382,7 +389,8 @@ const COLUMNS: ColumnDef<PortfolioRow>[] = [
       );
     },
   },
-];
+  ];
+}
 
 // ---------------------------------------------------------------------------
 // Cells
@@ -395,7 +403,7 @@ const COLUMNS: ColumnDef<PortfolioRow>[] = [
  * green or red for ~1s. Without this, a 15s auto-refresh is invisible: the user has no
  * idea whether anything changed, or whether the page is even still updating.
  */
-function CmpCell({ row }: { row: PortfolioRow }) {
+function CmpCell({ row, currency }: { row: PortfolioRow; currency: string }) {
   const { cmp, dayChangePercent, quoteStatus } = row;
 
   const previous = useRef<number | null>(null);
@@ -430,7 +438,7 @@ function CmpCell({ row }: { row: PortfolioRow }) {
       aria-live="polite"
     >
       <span className={clsx("font-semibold", quoteStatus.stale && "text-muted")}>
-        {formatPrice(cmp)}
+        {formatPrice(cmp, currency)}
       </span>
 
       {dayChangePercent != null && (

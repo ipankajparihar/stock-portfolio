@@ -113,6 +113,75 @@ body {
   font-feature-settings: "tnum";
 }
 
+/* Shared form control styling — every text/number/date/select input in the manage-holdings
+   and manage-watchlist forms shares this so they read as one consistent form, not a pile of
+   ad hoc inputs. */
+.input {
+  @apply w-full rounded-lg border border-border-base bg-surface px-3 py-2 text-sm;
+  @apply placeholder:text-muted focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:outline-none;
+}
+
+/* ---------------------------------------------------------------------------
+   Landing page
+   --------------------------------------------------------------------------- */
+
+/* Reusable button shapes for the landing CTAs. `bg-foreground/text-background` gives a
+   guaranteed-contrast solid button in both themes (black on light, white on dark) — the same
+   inversion the app's existing "Try again" button uses — rather than fighting accent contrast
+   on the darker dark-theme indigo. */
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-3 text-sm font-semibold text-background transition-opacity hover:opacity-90;
+  @apply focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none;
+}
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-border-strong bg-surface px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-surface-muted;
+  @apply focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none;
+}
+
+/* Accent gradient text for the hero headline. Cyan pairs with the indigo accent and keeps
+   contrast in both themes because the words behind it are large and bold. */
+.text-gradient {
+  background: linear-gradient(90deg, var(--accent), #06b6d4);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Soft, theme-aware wash behind the hero — built from the existing accent/gain tint tokens so
+   it stays subtle on both backgrounds rather than a hard-coded colour that only works on one. */
+.landing-hero-bg {
+  background:
+    radial-gradient(60% 120% at 12% -10%, var(--accent-soft) 0%, transparent 55%),
+    radial-gradient(45% 100% at 100% 0%, var(--gain-soft) 0%, transparent 50%);
+}
+
+/* Live market ticker marquee. Content is rendered twice back-to-back and the track is
+   translated by exactly -50%, so the loop is seamless. Paused on hover so a reader can catch a
+   value, and disabled entirely under reduced-motion. */
+@keyframes ticker-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.ticker-track {
+  /* Width shrinks to exactly the two content copies, so translateX(-50%) always lands on a
+     seam of exactly one copy — seamless at any viewport width. */
+  display: inline-flex;
+  width: max-content;
+  animation: ticker-scroll 55s linear infinite;
+}
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track {
+    animation: none;
+  }
+}
+
 /* Price-change flash: a brief tint when a CMP moves, so live updates are noticeable
    without the user having to stare at the number waiting for it to change. */
 @keyframes flash-gain {

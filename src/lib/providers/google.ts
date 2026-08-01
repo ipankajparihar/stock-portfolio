@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import type { Fundamentals } from "@/lib/types";
+import type { Exchange, Fundamentals } from "@/lib/types";
 
 /**
  * Google Finance — source of the P/E Ratio and Latest Earnings.
@@ -36,7 +36,7 @@ const REQUEST_TIMEOUT_MS = 8_000;
 /** Result of scraping one quote page. `null` fields mean "Google didn't give us this". */
 export async function fetchFundamentals(
   symbol: string,
-  exchange: "NSE" | "BSE",
+  exchange: Exchange,
 ): Promise<Fundamentals> {
   const url = `https://www.google.com/finance/quote/${encodeURIComponent(symbol)}:${exchange}`;
 

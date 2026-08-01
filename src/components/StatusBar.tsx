@@ -73,6 +73,11 @@ export const StatusBar = memo(function StatusBar({
   // never coming — so a broken connection says so instead of counting down to nothing.
   const isDisconnected = !isConnected && !isPaused;
 
+  // Outside trading hours the server stretches its own cache to 30 minutes and the client
+  // skips its background poll entirely (see `market-hours.ts`) — a 15s countdown ring next to
+  // a "Market closed" pill would be promising an update that provably isn't coming.
+  const isMarketLive = market.live;
+
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
       {/* Market state */}
@@ -137,7 +142,9 @@ export const StatusBar = memo(function StatusBar({
             ? "Live updates disconnected, reconnecting. Refresh everything now"
             : isPaused
               ? "Live updates paused while the tab is hidden. Refresh everything now"
-              : `Refresh everything now. Next live update in ${secondsLeft} seconds`
+              : !isMarketLive
+                ? `Market is closed, prices are not updating live. Refresh everything now`
+                : `Refresh everything now. Next live update in ${secondsLeft} seconds`
         }
       >
         {isManualRefreshing || isDisconnected ? (
@@ -146,6 +153,8 @@ export const StatusBar = memo(function StatusBar({
             className={clsx(isManualRefreshing && "animate-spin")}
             aria-hidden="true"
           />
+        ) : !isMarketLive ? (
+          <RefreshCw size={13} aria-hidden="true" />
         ) : (
           <CountdownRing progress={progress} />
         )}
@@ -157,7 +166,9 @@ export const StatusBar = memo(function StatusBar({
               ? "Reconnecting…"
               : isPaused
                 ? "Paused"
-                : `Live · ${secondsLeft}s`}
+                : !isMarketLive
+                  ? `Updated ${formatRelativeTime(updatedAt)}`
+                  : `Live · ${secondsLeft}s`}
         </span>
       </button>
     </div>

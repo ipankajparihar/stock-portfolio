@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { Briefcase, IndianRupee, PieChart, TrendingUp } from "lucide-react";
+import { Briefcase, DollarSign, IndianRupee, PieChart, TrendingUp } from "lucide-react";
 import clsx from "clsx";
 import { GainLoss } from "@/components/ui/GainLoss";
 import { directionOf, formatCurrency, formatPercent } from "@/lib/format";
@@ -22,9 +22,14 @@ import type { SectorGroup, Totals } from "@/lib/types";
 interface SummaryCardsProps {
   totals: Totals;
   sectors: SectorGroup[];
+  currency: string;
 }
 
-export const SummaryCards = memo(function SummaryCards({ totals, sectors }: SummaryCardsProps) {
+export const SummaryCards = memo(function SummaryCards({
+  totals,
+  sectors,
+  currency,
+}: SummaryCardsProps) {
   const direction = directionOf(totals.gainLoss);
 
   const bestSector = [...sectors].sort((a, b) => b.gainLossPercent - a.gainLossPercent)[0];
@@ -36,11 +41,13 @@ export const SummaryCards = memo(function SummaryCards({ totals, sectors }: Summ
       className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
     >
       <Card
-        icon={<IndianRupee size={18} />}
+        icon={currency === "INR" ? <IndianRupee size={18} /> : <DollarSign size={18} />}
         label="Total Investment"
         hint={`Across ${sectors.reduce((n, s) => n + s.rows.length, 0)} holdings`}
       >
-        <p className="text-2xl font-semibold tabular">{formatCurrency(totals.investment)}</p>
+        <p className="text-2xl font-semibold tabular">
+          {formatCurrency(totals.investment, currency)}
+        </p>
       </Card>
 
       <Card
@@ -48,7 +55,9 @@ export const SummaryCards = memo(function SummaryCards({ totals, sectors }: Summ
         label="Present Value"
         hint="Live, from Yahoo Finance"
       >
-        <p className="text-2xl font-semibold tabular">{formatCurrency(totals.presentValue)}</p>
+        <p className="text-2xl font-semibold tabular">
+          {formatCurrency(totals.presentValue, currency)}
+        </p>
       </Card>
 
       <Card
@@ -64,7 +73,7 @@ export const SummaryCards = memo(function SummaryCards({ totals, sectors }: Summ
         // The one card that earns a tinted background — it's the headline metric.
         tone={direction}
       >
-        <GainLoss value={totals.gainLoss} percent={totals.gainLossPercent} size="lg" />
+        <GainLoss value={totals.gainLoss} percent={totals.gainLossPercent} currency={currency} size="lg" />
       </Card>
 
       <Card icon={<PieChart size={18} />} label="Sector Spread" hint={`${sectors.length} sectors`}>
