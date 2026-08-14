@@ -3,17 +3,23 @@
 import { useState } from "react";
 import { Plus, Wallet, X } from "lucide-react";
 import clsx from "clsx";
-import { AddHoldingForm } from "@/components/portfolio/AddHoldingForm";
-import { HoldingLotsList } from "@/components/portfolio/HoldingLotsList";
-import type { HoldingLot } from "@/lib/types";
+import { AddTradeForm } from "@/components/portfolio/AddTradeForm";
+import { TransactionsList } from "@/components/portfolio/TransactionsList";
+import type { Holding, Transaction } from "@/lib/types";
 
 /**
- * The transaction-record layer beneath the live dashboard above: every purchase exactly as
- * entered, with the form to add another tucked behind a toggle rather than always on screen —
- * once a portfolio has a dozen lots, a permanently-open form is just something to scroll past.
+ * The ledger beneath the live dashboard above: every trade exactly as entered, with the form to
+ * add another tucked behind a toggle rather than always on screen — once a portfolio has a dozen
+ * trades, a permanently-open form is just something to scroll past.
  */
-export function ManageHoldingsSection({ lots }: { lots: HoldingLot[] }) {
-  const [showForm, setShowForm] = useState(lots.length === 0);
+export function ManageHoldingsSection({
+  trades,
+  openPositions,
+}: {
+  trades: Transaction[];
+  openPositions: Holding[];
+}) {
+  const [showForm, setShowForm] = useState(trades.length === 0);
 
   return (
     <section id="manage-holdings" className="scroll-mt-20 space-y-4 border-t border-border-base pt-6">
@@ -23,7 +29,7 @@ export function ManageHoldingsSection({ lots }: { lots: HoldingLot[] }) {
             <Wallet size={18} className="text-muted" aria-hidden="true" />
             Manage Holdings
           </h2>
-          <p className="text-sm text-muted">Every purchase you&apos;ve recorded, in one place.</p>
+          <p className="text-sm text-muted">Every trade you&apos;ve recorded, in one place.</p>
         </div>
 
         <button
@@ -39,13 +45,15 @@ export function ManageHoldingsSection({ lots }: { lots: HoldingLot[] }) {
           )}
         >
           {showForm ? <X size={15} /> : <Plus size={15} />}
-          {showForm ? "Close" : "Record a purchase"}
+          {showForm ? "Close" : "Record a trade"}
         </button>
       </div>
 
-      {showForm && <AddHoldingForm onClose={() => setShowForm(false)} />}
+      {showForm && (
+        <AddTradeForm onClose={() => setShowForm(false)} openPositions={openPositions} />
+      )}
 
-      <HoldingLotsList lots={lots} onAddClick={() => setShowForm(true)} />
+      <TransactionsList trades={trades} onAddClick={() => setShowForm(true)} />
     </section>
   );
 }

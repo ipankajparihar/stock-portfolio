@@ -1,15 +1,18 @@
 import { cached, errorMessage, type CacheResult } from "@/lib/cache";
-import { getUserHoldings } from "@/lib/holdings-repo";
+import { getRealized, getUserHoldings, type RealizedResult } from "@/lib/holdings-repo";
 import { mapLimit } from "@/lib/limit";
 import { isAnyMarketOpen } from "@/lib/market-hours";
 import { fetchFundamentals } from "@/lib/providers/google";
 import { fetchQuotes } from "@/lib/providers/yahoo";
+import { recordSnapshots } from "@/lib/snapshots-repo";
 import type {
   FieldStatus,
   Fundamentals,
   Holding,
   LiveQuote,
   MarketGroup,
+  RealizedSale,
+  RealizedSummary,
   PortfolioResponse,
   PortfolioRow,
   SectorGroup,
@@ -42,7 +45,12 @@ export async function getPortfolio(userId: string): Promise<PortfolioResponse> {
   const quoteWarnings: string[] = [];
   const fundamentalsWarnings: string[] = [];
 
-  const holdings = await getUserHoldings(userId);
+  // Holdings and realized results both derive from the same ledger read; fetching them together
+  // keeps it to one round-trip pair rather than serializing the DB behind the quote fetch.
+  const [holdings, realized] = await Promise.all([
+    getUserHoldings(userId),
+    getRealized(userId),
+  ]);
 
   // Both feeds are independent — fetch them in parallel rather than serially.
   // Each degrades to a warning rather than an exception, so a total failure of one provider
@@ -56,8 +64,30 @@ export async function getPortfolio(userId: string): Promise<PortfolioResponse> {
     buildRow(holding, quotes, fundamentals?.get(holding.id) ?? null),
   );
 
+  if (realized.oversoldSymbols.length > 0) {
+    // The write path rejects oversells, so this means the ledger was edited out of band.
+    quoteWarnings.push(
+      `Sold more than held for ${realized.oversoldSymbols.join(", ")} — check those trades.`,
+    );
+  }
+
+  const marketGroups = groupByMarket(rows, realized);
+
+  // Fire-and-forget: a snapshot is a nice-to-have for a future chart, never a reason to fail the
+  // dashboard, so a write error is swallowed rather than surfaced.
+  void recordSnapshots(
+    userId,
+    marketGroups.map((group) => ({
+      market: group.market,
+      currency: group.currency,
+      investment: group.investment,
+      presentValue: group.presentValue,
+      realizedGain: group.realized.realizedGain,
+    })),
+  ).catch(() => {});
+
   return {
-    marketGroups: groupByMarket(rows),
+    marketGroups,
     updatedAt: Date.now(),
     fundamentalsUpdatedAt: oldestFetchedAt(fundamentals),
     marketState: deriveMarketState(quotes?.value),
@@ -230,12 +260,18 @@ function statusFor(
  * `portfolioPercent` on every row and sector is computed against that market's own
  * investment total — weights never cross a currency boundary.
  */
-function groupByMarket(rows: PortfolioRow[]): MarketGroup[] {
+function groupByMarket(rows: PortfolioRow[], realized: RealizedResult): MarketGroup[] {
   const byMarket = new Map<string, PortfolioRow[]>();
   for (const row of rows) {
     const bucket = byMarket.get(row.market);
     if (bucket) bucket.push(row);
     else byMarket.set(row.market, [row]);
+  }
+
+  // A market the user has fully exited has no open rows, but its realized gains still matter —
+  // seed those markets so selling your last position doesn't erase the record of how it went.
+  for (const closed of realized.closedPositions) {
+    if (!byMarket.has(closed.market)) byMarket.set(closed.market, []);
   }
 
   return [...byMarket.entries()]
@@ -245,14 +281,35 @@ function groupByMarket(rows: PortfolioRow[]): MarketGroup[] {
         row.portfolioPercent = pct(row.investment, totalInvestment);
       }
 
+      const closedPositions = realized.closedPositions.filter((c) => c.market === market);
+      const marketSales = realized.sales.filter((s) => s.market === market);
+
       return {
         market: market as Holding["market"],
-        currency: marketRows[0].currency,
+        currency: marketRows[0]?.currency ?? closedPositions[0]?.currency ?? "USD",
         sectors: groupBySector(marketRows, totalInvestment),
+        realized: summarizeRealized(marketSales),
+        closedPositions,
         ...computeTotals(marketRows, totalInvestment),
       };
     })
     .sort((a, b) => b.investment - a.investment);
+}
+
+function summarizeRealized(sales: RealizedSale[]): RealizedSummary {
+  const proceeds = sum(sales.map((s) => s.proceeds));
+  const costBasis = sum(sales.map((s) => s.costBasis));
+  const realizedGain = proceeds - costBasis;
+
+  return {
+    proceeds,
+    costBasis,
+    realizedGain,
+    realizedGainPercent: pct(realizedGain, costBasis),
+    shortTermGain: sum(sales.filter((s) => s.term === "SHORT").map((s) => s.realizedGain)),
+    longTermGain: sum(sales.filter((s) => s.term === "LONG").map((s) => s.realizedGain)),
+    saleCount: sales.length,
+  };
 }
 
 function bucketBySector(rows: PortfolioRow[]): Map<string, PortfolioRow[]> {

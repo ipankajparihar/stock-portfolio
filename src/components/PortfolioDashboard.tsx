@@ -16,6 +16,7 @@ import { PortfolioTable } from "@/components/PortfolioTable";
 import { SectorCharts } from "@/components/SectorCharts";
 import { SectorSection } from "@/components/SectorSection";
 import { SummaryCards } from "@/components/SummaryCards";
+import { RealizedPanel } from "@/components/portfolio/RealizedPanel";
 import { StatusBar } from "@/components/StatusBar";
 import { Banner } from "@/components/ui/Banner";
 import { GainLoss } from "@/components/ui/GainLoss";
@@ -133,7 +134,17 @@ function MarketSection({ group }: { group: MarketGroup }) {
         </span>
       </div>
 
-      <SummaryCards totals={group} sectors={group.sectors} currency={group.currency} />
+      <SummaryCards
+        totals={group}
+        sectors={group.sectors}
+        currency={group.currency}
+        realized={group.realized}
+      />
+      <RealizedPanel
+        realized={group.realized}
+        closedPositions={group.closedPositions}
+        currency={group.currency}
+      />
       <SectorCharts sectors={group.sectors} currency={group.currency} />
 
       <div className="flex flex-wrap items-center gap-3">
@@ -319,16 +330,16 @@ function NoHoldingsEmptyState() {
       <span className="mx-auto inline-flex size-12 items-center justify-center rounded-full bg-accent-soft text-accent">
         <Wallet size={22} aria-hidden="true" />
       </span>
-      <h2 className="mt-4 text-base font-semibold">You haven’t added any holdings yet</h2>
+      <h2 className="mt-4 text-base font-semibold">You haven’t recorded any trades yet</h2>
       <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-        Record a purchase — symbol, quantity, price, and date — and it will show up here with a
-        live price and gain/loss.
+        Record a buy — symbol, quantity, price, and date — and it will show up here with a live
+        price and gain/loss. Sell it later and the realized profit is worked out for you.
       </p>
       <a
         href="#manage-holdings"
         className="mt-5 inline-flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90"
       >
-        Add your first holding
+        Record your first trade
       </a>
     </div>
   );

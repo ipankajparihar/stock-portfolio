@@ -1,11 +1,11 @@
 "use client";
 
 import { memo } from "react";
-import { Briefcase, DollarSign, IndianRupee, PieChart, TrendingUp } from "lucide-react";
+import { Briefcase, DollarSign, IndianRupee, PieChart, Receipt, TrendingUp } from "lucide-react";
 import clsx from "clsx";
 import { GainLoss } from "@/components/ui/GainLoss";
 import { directionOf, formatCurrency, formatPercent } from "@/lib/format";
-import type { SectorGroup, Totals } from "@/lib/types";
+import type { RealizedSummary, SectorGroup, Totals } from "@/lib/types";
 
 /**
  * The at-a-glance layer: the four numbers an investor wants before reading any table.
@@ -23,14 +23,19 @@ interface SummaryCardsProps {
   totals: Totals;
   sectors: SectorGroup[];
   currency: string;
+  realized: RealizedSummary;
 }
 
 export const SummaryCards = memo(function SummaryCards({
   totals,
   sectors,
   currency,
+  realized,
 }: SummaryCardsProps) {
   const direction = directionOf(totals.gainLoss);
+  // Only earns a card once something has actually been sold — an always-present "Realized: 0"
+  // would take a fifth of the row to say nothing.
+  const hasRealized = realized.saleCount > 0;
 
   const bestSector = [...sectors].sort((a, b) => b.gainLossPercent - a.gainLossPercent)[0];
   const worstSector = [...sectors].sort((a, b) => a.gainLossPercent - b.gainLossPercent)[0];
@@ -38,7 +43,10 @@ export const SummaryCards = memo(function SummaryCards({
   return (
     <section
       aria-label="Portfolio summary"
-      className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+      className={clsx(
+        "grid grid-cols-1 gap-4 sm:grid-cols-2",
+        hasRealized ? "xl:grid-cols-5" : "xl:grid-cols-4",
+      )}
     >
       <Card
         icon={currency === "INR" ? <IndianRupee size={18} /> : <DollarSign size={18} />}
@@ -62,7 +70,7 @@ export const SummaryCards = memo(function SummaryCards({
 
       <Card
         icon={<TrendingUp size={18} />}
-        label="Total Gain / Loss"
+        label={hasRealized ? "Unrealized Gain / Loss" : "Total Gain / Loss"}
         hint={
           direction === "up"
             ? "Portfolio is in profit"
@@ -75,6 +83,21 @@ export const SummaryCards = memo(function SummaryCards({
       >
         <GainLoss value={totals.gainLoss} percent={totals.gainLossPercent} currency={currency} size="lg" />
       </Card>
+
+      {hasRealized && (
+        <Card
+          icon={<Receipt size={18} />}
+          label="Realized Gain / Loss"
+          hint={`Booked across ${realized.saleCount} sale${realized.saleCount === 1 ? "" : "s"}`}
+        >
+          <GainLoss
+            value={realized.realizedGain}
+            percent={realized.realizedGainPercent}
+            currency={currency}
+            size="lg"
+          />
+        </Card>
+      )}
 
       <Card icon={<PieChart size={18} />} label="Sector Spread" hint={`${sectors.length} sectors`}>
         <div className="space-y-1 pt-0.5">

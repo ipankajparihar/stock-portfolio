@@ -2,6 +2,7 @@ import {
   boolean,
   date,
   doublePrecision,
+  index,
   integer,
   pgTable,
   primaryKey,
@@ -10,7 +11,7 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 import type { AdapterAccountType } from "next-auth/adapters";
-import type { Market } from "@/lib/types";
+import type { Market, TradeSide } from "@/lib/types";
 
 /**
  * Auth.js standard schema for the Drizzle Postgres adapter.
@@ -111,25 +112,66 @@ export const watchlist = pgTable(
 );
 
 /**
- * One row per manual buy. A user's *position* in a symbol is the aggregate of its lots —
- * computed at read time in `holdings-repo.ts`, not stored — so quantity/avg cost always
- * reflect the current set of purchases.
+ * One row per trade, buy or sell — an append-only ledger. A user's *position* in a symbol is the
+ * FIFO-matched result of its trades, computed at read time in `holdings-repo.ts` and never stored,
+ * so quantity, average cost and realized gains always reflect the current ledger.
+ *
+ * Quantity is always positive; `side` carries the direction.
  */
-export const holdingLots = pgTable("holding_lot", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  userId: text("userId")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  symbol: text("symbol").notNull(),
-  exchange: text("exchange").notNull(),
-  market: text("market").$type<Market>().notNull(),
-  name: text("name").notNull(),
-  sector: text("sector").notNull(),
-  quantity: doublePrecision("quantity").notNull(),
-  purchasePrice: doublePrecision("purchasePrice").notNull(),
-  currency: text("currency").notNull(),
-  purchaseDate: date("purchaseDate", { mode: "string" }).notNull(),
-  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
-});
+export const transactions = pgTable(
+  "transaction",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    symbol: text("symbol").notNull(),
+    exchange: text("exchange").notNull(),
+    market: text("market").$type<Market>().notNull(),
+    name: text("name").notNull(),
+    sector: text("sector").notNull(),
+    side: text("side").$type<TradeSide>().notNull().default("BUY"),
+    quantity: doublePrecision("quantity").notNull(),
+    price: doublePrecision("price").notNull(),
+    /** Brokerage/charges. Folded into cost basis on buys, netted off proceeds on sells. */
+    fees: doublePrecision("fees").notNull().default(0),
+    currency: text("currency").notNull(),
+    tradeDate: date("tradeDate", { mode: "string" }).notNull(),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("transaction_user_idx").on(table.userId),
+    index("transaction_user_symbol_idx").on(table.userId, table.symbol, table.exchange),
+  ],
+);
+
+/**
+ * A daily mark of what the portfolio was worth, one row per user per market per day.
+ *
+ * This exists because portfolio history *cannot be reconstructed after the fact* — deriving it
+ * would need historical prices for every held symbol on every past day, which the free data source
+ * won't provide at any reasonable cost. Recording forward from today is the only cheap option.
+ */
+export const portfolioSnapshots = pgTable(
+  "portfolio_snapshot",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    market: text("market").$type<Market>().notNull(),
+    currency: text("currency").notNull(),
+    asOf: date("asOf", { mode: "string" }).notNull(),
+    /** Cost basis of open positions on that day. */
+    investment: doublePrecision("investment").notNull(),
+    presentValue: doublePrecision("presentValue").notNull(),
+    /** Cumulative realized gain to date — so total return can be charted, not just paper gains. */
+    realizedGain: doublePrecision("realizedGain").notNull(),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.userId, table.market, table.asOf)],
+);
