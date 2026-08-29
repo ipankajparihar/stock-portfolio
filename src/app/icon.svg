@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Portfolio Dashboard">
+  <title>Portfolio Dashboard</title>
+  <!--
+    Favicon. Deliberately built for 16px first, where it spends most of its life in a browser tab:
+    one bold shape, no fine detail, and a full-bleed tile so it reads as an app icon rather than a
+    floating glyph. The gradient is the app's own accent → cyan ramp (the same one `.text-gradient`
+    uses on the hero), which is what makes it recognisable at a size too small for any detail.
+  -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="32" x2="32" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4f46e5" />
+      <stop offset="1" stop-color="#06b6d4" />
+    </linearGradient>
+  </defs>
+
+  <rect width="32" height="32" rx="7.5" fill="url(#tile)" />
+
+  <!--
+    An ascending close line, not a bar chart: at 16px, bars collapse into an indistinct block,
+    while a single stroke keeps its silhouette. The dip in the middle is intentional — a straight
+    diagonal reads as a generic arrow, a zigzag reads as a market.
+  -->
+  <path
+    d="M6.25 21.75 L12.75 14.75 L17.75 18.25 L25.75 9.5"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="3.4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

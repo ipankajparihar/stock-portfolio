@@ -104,6 +104,41 @@ body {
 }
 
 /**
+ * Pointer cursor on everything interactive.
+ *
+ * Tailwind v3's preflight set `cursor: pointer` on buttons; v4 dropped it to match the raw
+ * browser default, which leaves every button in the app showing a plain arrow. Restoring it
+ * once here beats adding `cursor-pointer` to ~21 files of buttons and forgetting it on the
+ * next one.
+ *
+ * In `@layer base`, so any component that deliberately sets its own cursor utility still wins.
+ * Anchors need `[href]` — a bare `<a>` is not clickable. Labels are deliberately excluded:
+ * most wrap a text input here, where a pointer over the field would be wrong.
+ */
+@layer base {
+  button,
+  summary,
+  select,
+  a[href],
+  [role="button"],
+  input[type="submit"],
+  input[type="reset"],
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="file"] {
+    cursor: pointer;
+  }
+
+  /* A disabled control should say "you can't", not invite the click. */
+  button:disabled,
+  select:disabled,
+  input:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
+
+/**
  * Tabular figures for every number in the app, so digits align in a column.
  * With proportional digits a column of rupee amounts looks ragged and is measurably
  * harder to scan and compare.
