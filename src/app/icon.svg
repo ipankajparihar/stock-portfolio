@@ -1,7 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Portfolio Dashboard">
   <title>Portfolio Dashboard</title>
   <!--
-    Favicon. Deliberately built for 16px first, where it spends most of its life in a browser tab:
+    Favicon. KEEP IN SYNC with `src/components/ui/BrandMark.tsx`, which draws the same mark inline
+    for the header — they are separate because Next's icon file convention needs a real file here.
+
+    Deliberately built for 16px first, where it spends most of its life in a browser tab:
     one bold shape, no fine detail, and a full-bleed tile so it reads as an app icon rather than a
     floating glyph. The gradient is the app's own accent → cyan ramp (the same one `.text-gradient`
     uses on the hero), which is what makes it recognisable at a size too small for any detail.
