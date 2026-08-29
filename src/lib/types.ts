@@ -36,18 +36,81 @@ export interface Holding {
 export type Exchange = "NSE" | "BSE" | "NASDAQ" | "NYSE";
 
 /** One manual buy exactly as entered by the user — the row stored in `holding_lot`. */
-export interface HoldingLot {
+/** Which way a trade went. Quantity is always positive; this carries the direction. */
+export type TradeSide = "BUY" | "SELL";
+
+/**
+ * One recorded trade. A position is the FIFO-matched result of all its trades — computed at read
+ * time in `holdings-repo.ts`, never stored, so it always reflects the current ledger.
+ */
+export interface Transaction {
   id: string;
   symbol: string;
   exchange: Exchange;
   market: Market;
   name: string;
   sector: string;
+  side: TradeSide;
   quantity: number;
-  purchasePrice: number;
+  /** Price per share, in `currency`. */
+  price: number;
+  /** Brokerage/charges for this trade. Reduces realized gain. */
+  fees: number;
   currency: string;
   /** ISO date string, e.g. "2026-01-15". */
-  purchaseDate: string;
+  tradeDate: string;
+}
+
+/** One SELL matched against the buy lots it consumed. */
+export interface RealizedSale {
+  transactionId: string;
+  symbol: string;
+  exchange: Exchange;
+  market: Market;
+  name: string;
+  sector: string;
+  currency: string;
+  quantity: number;
+  /** Sale value less sell-side fees. */
+  proceeds: number;
+  /** Cost of the matched buy lots, including their apportioned buy-side fees. */
+  costBasis: number;
+  realizedGain: number;
+  realizedGainPercent: number;
+  saleDate: string;
+  /** Days held by the longest-held matched lot — what decides the tax term. */
+  holdingPeriodDays: number;
+  term: "SHORT" | "LONG";
+}
+
+/** Realized totals for one market. */
+export interface RealizedSummary {
+  proceeds: number;
+  costBasis: number;
+  realizedGain: number;
+  realizedGainPercent: number;
+  shortTermGain: number;
+  longTermGain: number;
+  saleCount: number;
+}
+
+/** A symbol the user has sold out of, wholly or in part. */
+export interface ClosedPosition {
+  id: string;
+  symbol: string;
+  name: string;
+  exchange: Exchange;
+  market: Market;
+  currency: string;
+  sector: string;
+  quantitySold: number;
+  proceeds: number;
+  costBasis: number;
+  realizedGain: number;
+  realizedGainPercent: number;
+  lastSellDate: string;
+  /** False when some shares are still held — a partial exit. */
+  isFullyClosed: boolean;
 }
 
 /** A saved watchlist entry — no position, just a symbol the user wants to track. */
@@ -220,10 +283,17 @@ export interface SectorGroup extends Totals {
  * total across both would be meaningless. Each market gets its own subtotal instead; there is
  * no cross-market total anywhere in this app.
  */
+/**
+ * `Totals` deliberately stays about *open* positions — it is extended by `SectorGroup` and consumed
+ * by the summary cards, sector charts and the holdings table, none of which mean anything for a
+ * position that no longer exists. Realized results hang alongside instead.
+ */
 export interface MarketGroup extends Totals {
   market: Market;
   currency: string;
   sectors: SectorGroup[];
+  realized: RealizedSummary;
+  closedPositions: ClosedPosition[];
 }
 
 // ---------------------------------------------------------------------------

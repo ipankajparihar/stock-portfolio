@@ -1,7 +1,7 @@
 import { PortfolioDashboard } from "@/components/PortfolioDashboard";
 import { ManageHoldingsSection } from "@/components/portfolio/ManageHoldingsSection";
 import { verifySession } from "@/lib/dal";
-import { getUserLots } from "@/lib/holdings-repo";
+import { getUserHoldings, getUserTransactions } from "@/lib/holdings-repo";
 
 /**
  * The dashboard is client-rendered on purpose.
@@ -15,12 +15,16 @@ import { getUserLots } from "@/lib/holdings-repo";
  */
 export default async function PortfolioPage() {
   const { userId } = await verifySession();
-  const lots = await getUserLots(userId);
+  // Open positions drive the sell picker — you can only sell what the ledger says you still hold.
+  const [trades, openPositions] = await Promise.all([
+    getUserTransactions(userId),
+    getUserHoldings(userId),
+  ]);
 
   return (
     <main className="mx-auto w-full max-w-[1400px] space-y-8 px-4 py-6 sm:px-6 lg:px-8">
       <PortfolioDashboard />
-      <ManageHoldingsSection lots={lots} />
+      <ManageHoldingsSection trades={trades} openPositions={openPositions} />
     </main>
   );
 }

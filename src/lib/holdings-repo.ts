@@ -2,74 +2,142 @@ import "server-only";
 
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { holdingLots, watchlist } from "@/db/schema";
-import type { Exchange, Holding, HoldingLot, Market, WatchlistEntry } from "@/lib/types";
+import { transactions, watchlist } from "@/db/schema";
+import {
+  averageOpenCost,
+  groupTradesByInstrument,
+  matchFifo,
+  openQuantity,
+} from "@/lib/fifo";
+import type {
+  ClosedPosition,
+  Exchange,
+  Holding,
+  Market,
+  RealizedSale,
+  Transaction,
+  TradeSide,
+  WatchlistEntry,
+} from "@/lib/types";
 
 /**
- * Reads every purchase lot for a user and collapses lots on the same `(symbol, exchange)`
- * into one aggregated `Holding` — the shape the derivation pipeline in `portfolio-service.ts`
- * already expects. Quantity sums; purchase price becomes the weighted-average cost.
+ * Collapses a user's trade ledger into current positions via FIFO matching.
+ *
+ * Returns the same `Holding` shape the derivation pipeline in `portfolio-service.ts` already
+ * expects, so nothing downstream changed when sells arrived. Two things differ from the old
+ * buy-only aggregation: `purchasePrice` is the weighted average of the shares *still held* (FIFO
+ * has consumed the oldest lots, so averaging every lot ever bought would misstate it), and
+ * fully-sold positions are dropped — a zero-quantity row would otherwise linger in the table, in
+ * the quote cache key, and in `findUserSymbol`.
  */
 export async function getUserHoldings(userId: string): Promise<Holding[]> {
-  const lots = await db.query.holdingLots.findMany({
-    where: eq(holdingLots.userId, userId),
-  });
+  const trades = await getUserTransactions(userId);
 
-  const byPosition = new Map<string, HoldingLot[]>();
-  for (const lot of lots) {
-    const key = `${lot.symbol}:${lot.exchange}`;
-    const bucket = byPosition.get(key);
-    if (bucket) bucket.push(toHoldingLot(lot));
-    else byPosition.set(key, [toHoldingLot(lot)]);
+  const holdings: Holding[] = [];
+  for (const [id, instrumentTrades] of groupTradesByInstrument(trades)) {
+    const { openLots } = matchFifo(instrumentTrades);
+    const quantity = openQuantity(openLots);
+    if (quantity <= 0) continue;
+
+    // Identity comes from the most recent trade: a renamed company or reclassified sector should
+    // reflect the latest information, not whichever row happened to be inserted first.
+    const latest = instrumentTrades.reduce((a, b) => (a.tradeDate >= b.tradeDate ? a : b));
+
+    holdings.push({
+      id,
+      name: latest.name,
+      symbol: latest.symbol,
+      exchange: latest.exchange,
+      market: latest.market,
+      currency: latest.currency,
+      sector: latest.sector,
+      purchasePrice: averageOpenCost(openLots),
+      quantity,
+    });
   }
 
-  return [...byPosition.entries()].map(([id, positionLots]) => {
-    const quantity = sum(positionLots.map((l) => l.quantity));
-    const totalCost = sum(positionLots.map((l) => l.quantity * l.purchasePrice));
-    const [first] = positionLots;
+  return holdings;
+}
 
-    return {
+/** The raw ledger, newest trade first. */
+export async function getUserTransactions(userId: string): Promise<Transaction[]> {
+  const rows = await db.query.transactions.findMany({
+    where: eq(transactions.userId, userId),
+    orderBy: (t, { desc }) => [desc(t.tradeDate), desc(t.createdAt)],
+  });
+  return rows.map(toTransaction);
+}
+
+export interface RealizedResult {
+  sales: RealizedSale[];
+  closedPositions: ClosedPosition[];
+  /** Instruments whose ledger sells more than it buys — should be unreachable via the write path. */
+  oversoldSymbols: string[];
+}
+
+/** Every realized sale, plus one rolled-up `ClosedPosition` per instrument the user has sold from. */
+export async function getRealized(userId: string): Promise<RealizedResult> {
+  const trades = await getUserTransactions(userId);
+
+  const sales: RealizedSale[] = [];
+  const closedPositions: ClosedPosition[] = [];
+  const oversoldSymbols: string[] = [];
+
+  for (const [id, instrumentTrades] of groupTradesByInstrument(trades)) {
+    const { openLots, realized, oversold } = matchFifo(instrumentTrades);
+    if (oversold) oversoldSymbols.push(id);
+    if (realized.length === 0) continue;
+
+    sales.push(...realized);
+
+    const first = realized[0];
+    const proceeds = sumBy(realized, (r) => r.proceeds);
+    const costBasis = sumBy(realized, (r) => r.costBasis);
+    const realizedGain = proceeds - costBasis;
+
+    closedPositions.push({
       id,
-      name: first.name,
       symbol: first.symbol,
+      name: first.name,
       exchange: first.exchange,
       market: first.market,
       currency: first.currency,
       sector: first.sector,
-      purchasePrice: quantity === 0 ? 0 : totalCost / quantity,
-      quantity,
-    };
-  });
+      quantitySold: sumBy(realized, (r) => r.quantity),
+      proceeds,
+      costBasis,
+      realizedGain,
+      realizedGainPercent: costBasis === 0 ? 0 : (realizedGain / costBasis) * 100,
+      lastSellDate: realized.reduce((a, b) => (a.saleDate >= b.saleDate ? a : b)).saleDate,
+      isFullyClosed: openQuantity(openLots) <= 0,
+    });
+  }
+
+  return { sales, closedPositions, oversoldSymbols };
 }
 
-export async function getUserLots(userId: string): Promise<HoldingLot[]> {
-  const lots = await db.query.holdingLots.findMany({
-    where: eq(holdingLots.userId, userId),
-    orderBy: (t, { desc }) => [desc(t.purchaseDate)],
-  });
-  return lots.map(toHoldingLot);
-}
-
-export interface NewHoldingLot {
+export interface NewTransaction {
   symbol: string;
   exchange: Exchange;
   market: Market;
   name: string;
   sector: string;
+  side: TradeSide;
   quantity: number;
-  purchasePrice: number;
+  price: number;
+  fees: number;
   currency: string;
-  purchaseDate: string;
+  tradeDate: string;
 }
 
-export async function addHoldingLot(userId: string, lot: NewHoldingLot): Promise<void> {
-  await db.insert(holdingLots).values({ userId, ...lot });
+export async function addTransaction(userId: string, trade: NewTransaction): Promise<void> {
+  await db.insert(transactions).values({ userId, ...trade });
 }
 
-export async function removeHoldingLot(userId: string, lotId: string): Promise<void> {
+export async function removeTransaction(userId: string, transactionId: string): Promise<void> {
   await db
-    .delete(holdingLots)
-    .where(and(eq(holdingLots.id, lotId), eq(holdingLots.userId, userId)));
+    .delete(transactions)
+    .where(and(eq(transactions.id, transactionId), eq(transactions.userId, userId)));
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +179,7 @@ export async function removeFromWatchlist(userId: string, entryId: string): Prom
     .where(and(eq(watchlist.id, entryId), eq(watchlist.userId, userId)));
 }
 
-function toHoldingLot(row: typeof holdingLots.$inferSelect): HoldingLot {
+function toTransaction(row: typeof transactions.$inferSelect): Transaction {
   return {
     id: row.id,
     symbol: row.symbol,
@@ -119,13 +187,15 @@ function toHoldingLot(row: typeof holdingLots.$inferSelect): HoldingLot {
     market: row.market,
     name: row.name,
     sector: row.sector,
+    side: row.side,
     quantity: row.quantity,
-    purchasePrice: row.purchasePrice,
+    price: row.price,
+    fees: row.fees,
     currency: row.currency,
-    purchaseDate: row.purchaseDate,
+    tradeDate: row.tradeDate,
   };
 }
 
-function sum(values: number[]): number {
-  return values.reduce((acc, v) => acc + v, 0);
+function sumBy<T>(items: T[], pick: (item: T) => number): number {
+  return items.reduce((acc, item) => acc + pick(item), 0);
 }
