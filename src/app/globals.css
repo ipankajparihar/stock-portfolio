@@ -148,12 +148,23 @@ body {
   font-feature-settings: "tnum";
 }
 
-/* Shared form control styling — every text/number/date/select input in the manage-holdings
-   and manage-watchlist forms shares this so they read as one consistent form, not a pile of
-   ad hoc inputs. */
-.input {
-  @apply w-full rounded-lg border border-border-base bg-surface px-3 py-2 text-sm;
-  @apply placeholder:text-muted focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:outline-none;
+/**
+ * Reusable component classes.
+ *
+ * These MUST live in `@layer components`. Tailwind orders its layers
+ * `theme, base, components, utilities`, so anything here is overridable by a utility at the call
+ * site — which is the whole point of writing `class="input pl-9"`. Left unlayered (as these were),
+ * they sit *outside* the cascade layers and therefore beat every utility, so `pl-9` silently lost
+ * to this rule's own `px-3` and the search icon rendered on top of the placeholder text.
+ */
+@layer components {
+  /* Shared form control styling — every text/number/date/select input in the manage-holdings
+     and manage-watchlist forms shares this so they read as one consistent form, not a pile of
+     ad hoc inputs. */
+  .input {
+    @apply w-full rounded-lg border border-border-base bg-surface px-3 py-2 text-sm;
+    @apply placeholder:text-muted focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:outline-none;
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -163,14 +174,19 @@ body {
 /* Reusable button shapes for the landing CTAs. `bg-foreground/text-background` gives a
    guaranteed-contrast solid button in both themes (black on light, white on dark) — the same
    inversion the app's existing "Try again" button uses — rather than fighting accent contrast
-   on the darker dark-theme indigo. */
-.btn-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-3 text-sm font-semibold text-background transition-opacity hover:opacity-90;
-  @apply focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none;
-}
-.btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-border-strong bg-surface px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-surface-muted;
-  @apply focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none;
+   on the darker dark-theme indigo.
+
+   Layered for the same reason as `.input` above: a call site adding `w-full` or its own padding
+   should win, not lose silently. */
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-foreground px-5 py-3 text-sm font-semibold text-background transition-opacity hover:opacity-90;
+    @apply focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-border-strong bg-surface px-5 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-surface-muted;
+    @apply focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none;
+  }
 }
 
 /* Accent gradient text for the hero headline. Cyan pairs with the indigo accent and keeps

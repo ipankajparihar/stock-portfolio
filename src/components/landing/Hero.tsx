@@ -11,7 +11,13 @@ export function Hero({ isAuthed }: { isAuthed: boolean }) {
   return (
     <section className="landing-hero-bg border-b border-border-base">
       <div className="mx-auto grid w-full max-w-[1400px] items-center gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:py-24 lg:px-8">
-        <div>
+        {/*
+          Centred on mobile, left-aligned from `sm` up. On a narrow screen the column is barely
+          wider than the text itself, so a centred block reads as deliberate composition; at
+          desktop width the same centring would leave long ragged lines floating in the column,
+          which is why it flips rather than applying everywhere.
+        */}
+        <div className="text-center sm:text-left">
           <span className="inline-flex items-center gap-2 rounded-full border border-border-base bg-surface/70 px-3 py-1 text-xs font-medium text-muted-strong backdrop-blur">
             <span className="size-1.5 rounded-full bg-gain pulse-live" aria-hidden="true" />
             Live US &amp; India markets
@@ -23,7 +29,9 @@ export function Hero({ isAuthed }: { isAuthed: boolean }) {
             <span className="text-gradient">Own your portfolio.</span>
           </h1>
 
-          <p className="mt-5 max-w-xl text-lg text-muted-strong">
+          {/* `mx-auto` only matters once the paragraph is narrower than its column, i.e. at the
+              widths where `max-w-xl` actually bites; `sm:mx-0` hands it back to the left edge. */}
+          <p className="mx-auto mt-5 max-w-xl text-lg text-muted-strong sm:mx-0">
             Real-time prices, top movers, and a portfolio that tracks every purchase at its true
             cost basis — across the US and Indian markets, in one clean dashboard.
           </p>
@@ -32,7 +40,7 @@ export function Hero({ isAuthed }: { isAuthed: boolean }) {
             <CtaButtons isAuthed={isAuthed} />
           </div>
 
-          <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-3 text-sm text-muted">
+          <ul className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-3 text-sm text-muted sm:justify-start">
             <TrustItem icon={<Zap size={15} />} label="Live quotes, refreshed every minute" />
             <TrustItem icon={<Globe size={15} />} label="US & India coverage" />
             <TrustItem icon={<ShieldCheck size={15} />} label="Free · sign in with Google" />
